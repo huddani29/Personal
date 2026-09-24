@@ -33,9 +33,14 @@ if st.button("📊 RANGSOR FRISSÍTÉSE", use_container_width=True):
                         last_close = float(df_clean['Close'].iloc[-1])
                         daily_change = ((last_close - prev_close) / prev_close) * 100
                         
+                        if ".BD" in t:
+                            currency_formatted = f"{last_close:,.0f} Ft"
+                        else:
+                            currency_formatted = f"${last_close:.2f}"
+
                         ranking_data.append({
                             "Részvény (Ticker)": t,
-                            "Aktuális Ár": f"${last_close:.2f}" if ".BD" not in t else f"{last_close:.0f} Ft",
+                            "Aktuális Ár": currency_formatted,
                             "Napi Változás (%)": round(daily_change, 2)
                         })
                 except: continue
