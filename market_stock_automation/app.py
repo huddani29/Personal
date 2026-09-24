@@ -261,13 +261,19 @@ if st.session_state.AVAILABLE_TICKERS:
                             del st.session_state.portfolio["shares"][ticker]
                             if ticker in st.session_state.buy_prices_memory: del st.session_state.buy_prices_memory[ticker]
 # --- VAGYONTÖRTÉNET MENTÉSE ---
-if st.session_state.paper_persistent and 'all_data' in locals() and all_data is not None:
+if st.session_state.paper_persistent and 'all_data' in locals() and all_data is not None and not all_data.empty:
     calc_shares_value = 0.0
     for t, qty in st.session_state.portfolio["shares"].items():
-        if qty > 0 and t in all_data.columns.levels:
+        if qty > 0:
             try:
-                calc_shares_value += qty * float(all_data[t]['Close'].dropna().iloc[-1])
-            except:
+                # JAVÍTÁS: Sokkal biztonságosabb MultiIndex ellenőrzés, ami bírja a hálózati hibákat is
+                if isinstance(all_data.columns, pd.MultiIndex):
+                    if t in all_data.columns.levels[0]:
+                        calc_shares_value += qty * float(all_data[t]['Close'].dropna().iloc[-1])
+                else:
+                    if t in all_data.columns:
+                        calc_shares_value += qty * float(all_data['Close'].dropna().iloc[-1])
+            except: 
                 pass
                 
     total_net_worth = st.session_state.portfolio['balance'] + calc_shares_value
@@ -277,6 +283,7 @@ if st.session_state.paper_persistent and 'all_data' in locals() and all_data is 
             "Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), 
             "Teljes Vagyon": round(total_net_worth, 2)
         })
+
 # --- MULTI-PAGE RENDSZER ---
 page_monitor = st.Page("page_monitor.py", title="📈 Élő Grafikon Monitor", icon="📉")
 page_broker = st.Page("page_broker.py", title="🏦 Bróker Számla & Portfólió", icon="💰")
