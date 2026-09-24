@@ -3,4 +3,4 @@ yfinance
 pandas==2.2.2
 requests
 plotly
-pandas_ta==0.3.14b0
+pandas_ta
