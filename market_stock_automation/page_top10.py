@@ -35,8 +35,11 @@ if st.button("📊 RANGSOR FRISSÍTÉSE", use_container_width=True):
                         
                         if ".BD" in t:
                             currency_formatted = f"{last_close:,.0f} Ft"
+                        elif t in ["ASML", "SAP", "BMW", "DBK", "VOW3", "LVMH"]:
+                            currency_formatted = f"€{last_close:.2f}"
                         else:
                             currency_formatted = f"${last_close:.2f}"
+
 
                         ranking_data.append({
                             "Részvény (Ticker)": t,

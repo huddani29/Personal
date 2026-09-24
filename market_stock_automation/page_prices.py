@@ -46,12 +46,17 @@ if compare_tickers:
                     live_data.columns = [str(col) for col in live_data.columns]
                     last_p = float(live_data['Close'].iloc[-1])
                     
-                    # FORMÁZÁS VALUTA SZERINT
-                    if ".BD" in t: px_fmt = f"{last_p:,.0f} Ft"
-                    else: px_fmt = f"${last_p:.2f}"
+                    # JAVÍTÁS: A 'last_p' változót használjuk a formázásban!
+                    if ".BD" in t: 
+                        px_fmt = f"{last_p:,.0f} Ft"
+                    elif t in ["ASML", "SAP", "BMW", "DBK", "VOW3", "LVMH"]: 
+                        px_fmt = f"€{last_p:.2f}"
+                    else: 
+                        px_fmt = f"${last_p:.2f}"
                     
                     price_rows.append({"Részvény": t, "Aktuális Piaci Ár": px_fmt})
             except: continue
             
         if price_rows:
             st.dataframe(pd.DataFrame(price_rows), use_container_width=True)
+

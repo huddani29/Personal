@@ -45,11 +45,14 @@ if st.button("🚀 PIACI SCANNER INDÍTÁSA", use_container_width=True):
                     if rsi_val < 40 and macd_val > macd_sig: sig = "BUY (VÉTEL)"
                     elif rsi_val > 60: sig = "SELL (ELADÁS)"
                     
-                    # INTELLIGENS VALUTAFELISMERŐ FORMÁZÁS
+                    # UNIVERZÁLIS EURÓPAI / AMERIKAI VALUTAFELISMERŐ
                     if ".BD" in t:
                         price_formatted = f"{last_close_val:,.0f} Ft"
+                    elif t in ["ASML", "SAP", "BMW", "DBK", "VOW3", "LVMH"]:
+                        price_formatted = f"€{last_close_val:.2f}"
                     else:
                         price_formatted = f"${last_close_val:.2f}"
+
                     
                     results.append({
                         "Részvény (Ticker)": t, 
