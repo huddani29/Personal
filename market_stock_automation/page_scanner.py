@@ -5,10 +5,10 @@ import pandas_ta as ta
 import time
 from datetime import datetime
 
-AVAILABLE_TICKERS = st.session_state.get("AVAILABLE_TICKERS", ["TSLA", "NVDA", "AAPL", "MSFT", "PLTR"])
+AVAILABLE_TICKERS = st.session_state.get("AVAILABLE_TICKERS", ["TSLA", "NVDA", "AAPL"])
 
 st.title("🔍 Többrészes AI Scanner Dashboard")
-st.write("Futtass le egy teljes piaci elemzést a Kosáron.")
+st.write("Futtass le egy teljes piaci elemzést a figyelt részvénykosáron.")
 
 selected_tickers = st.multiselect("Szkennelendő részvények:", options=AVAILABLE_TICKERS, default=AVAILABLE_TICKERS)
 scan_interval = st.selectbox("Idősík választás:", options=["5m", "15m", "1h", "1d"], index=1)
@@ -39,20 +39,27 @@ if st.button("🚀 PIACI SCANNER INDÍTÁSA", use_container_width=True):
                 if not scan_data_clean.empty:
                     last_r = scan_data_clean.iloc[-1]
                     rsi_val = float(last_r['RSI'])
+                    last_close_val = float(last_r['Close'])
                     
                     sig = "HOLD"
                     if rsi_val < 40 and macd_val > macd_sig: sig = "BUY (VÉTEL)"
                     elif rsi_val > 60: sig = "SELL (ELADÁS)"
                     
+                    # INTELLIGENS VALUTAFELISMERŐ FORMÁZÁS
+                    if ".BD" in t:
+                        price_formatted = f"{last_close_val:,.0f} Ft"
+                    else:
+                        price_formatted = f"${last_close_val:.2f}"
+                    
                     results.append({
                         "Részvény (Ticker)": t, 
-                        "Aktuális Ár": f"${float(last_r['Close']):.2f}",
+                        "Aktuális Ár": price_formatted,
                         "RSI (14)": round(rsi_val, 2), 
                         "AI Ajánlás": sig,
                         "Legutóbbi Frissítés": scan_data_clean.index[-1].strftime("%Y-%m-%d %H:%M")
                     })
         except: continue
-        time.sleep(0.1)
+        time.sleep(0.05)
         
     progress_bar.empty()
     
