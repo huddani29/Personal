@@ -185,41 +185,41 @@ if st.session_state.AVAILABLE_TICKERS:
                     else:
                         st.session_state.signals_memory[ticker]["last_signal"] = "HOLD"
 
-                    # Kockázatkezelés (Stop-Loss / Take-Profit)
-                    if st.session_state.paper_persistent and bg_owned > 0:
-                        buy_price = st.session_state.buy_prices_memory.get(ticker, bg_price)
-                        price_change_pct = ((bg_price - buy_price) / buy_price) * 100
-                        current_sl = st.session_state.get("stop_loss_pct", 2.0)
-                    # Ez a sor a "current_sl = st.session_state.get('stop_loss_pct', 2.0)" után következik (20 szóköz)
+                    # --- 1. KOCKÁZATKEZELÉS (STOP-LOSS / TAKE-PROFIT) ---
+                    # JAVÍTÁS: Elsőként a feltételeken kívül kiszámítjuk a százalékos elmozdulást, hogy MINDIG létezzen a változó!
+                    buy_price = st.session_state.buy_prices_memory.get(ticker, bg_price)
+                    price_change_pct = ((bg_price - buy_price) / buy_price) * 100
+                    current_sl = st.session_state.get("stop_loss_pct", 2.0)
                     current_tp = st.session_state.get("take_profit_pct", 5.0)
-                    
-                    if price_change_pct <= -current_sl:
-                        revenue = bg_owned * bg_price
-                        st.session_state.portfolio['balance'] += revenue
-                        st.session_state.trade_history.append({"Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "🚨 STOP-LOSS ELADÁS", "Ár": f"${bg_price:.2f}", "Darab": bg_owned, "Összesen": f"${revenue:.2f}"})
-                        
-                        save_portfolio_to_disk()
-                        save_history_to_disk()
-                        
-                        send_discord_message(f"🚨 **STOP-LOSS ELADVA!** {ticker} {price_change_pct:.2f}% | Ár: ${bg_price:.2f}")
-                        st.session_state.portfolio["shares"][ticker] = 0
-                        del st.session_state.portfolio["shares"][ticker]
-                        if ticker in st.session_state.buy_prices_memory: del st.session_state.buy_prices_memory[ticker]
-                        continue
 
-                    elif price_change_pct >= current_tp:
-                        revenue = bg_owned * bg_price
-                        st.session_state.portfolio['balance'] += revenue
-                        st.session_state.trade_history.append({"Idะ": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "💰 TAKE-PROFIT ELADÁS", "Ár": f"${bg_price:.2f}", "Darab": bg_owned, "Összesen": f"${revenue:.2f}"})
-                        
-                        save_portfolio_to_disk()
-                        save_history_to_disk()
-                        
-                        send_discord_message(f"💰 **TAKE-PROFIT REALIZÁLVA!** {ticker} +{price_change_pct:.2f}% | Ár: ${bg_price:.2f}")
-                        st.session_state.portfolio["shares"][ticker] = 0
-                        del st.session_state.portfolio["shares"][ticker]
-                        if ticker in st.session_state.buy_prices_memory: del st.session_state.buy_prices_memory[ticker]
-                        continue
+                    # Csak akkor futtatjuk le a Stop-Loss/Take-Profit eladást, ha valóban van nyitott pozíciónk
+                    if st.session_state.paper_persistent and bg_owned > 0:
+                        # A) STOP-LOSS AUTOMATIKUS KIVÁLTÁS
+                        if price_change_pct <= -current_sl:
+                            revenue = bg_owned * bg_price
+                            st.session_state.portfolio['balance'] += revenue
+                            st.session_state.trade_history.append({"Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "🚨 STOP-LOSS ELADÁS", "Ár": f"${bg_price:.2f}", "Darab": bg_owned, "Összesen": f"${revenue:.2f}"})
+                            save_portfolio_to_disk()
+                            save_history_to_disk()
+                            send_discord_message(f"🚨 **STOP-LOSS ELADVA!** {ticker} {price_change_pct:.2f}% | Ár: ${bg_price:.2f}")
+                            st.session_state.portfolio["shares"][ticker] = 0
+                            del st.session_state.portfolio["shares"][ticker]
+                            if ticker in st.session_state.buy_prices_memory: del st.session_state.buy_prices_memory[ticker]
+                            continue
+
+                        # B) TAKE-PROFIT AUTOMATIKUS KIVÁLTÁS
+                        elif price_change_pct >= current_tp:
+                            revenue = bg_owned * bg_price
+                            st.session_state.portfolio['balance'] += revenue
+                            st.session_state.trade_history.append({"Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "💰 TAKE-PROFIT ELADÁS", "Ár": f"${bg_price:.2f}", "Darab": bg_owned, "Összesen": f"${revenue:.2f}"})
+                            save_portfolio_to_disk()
+                            save_history_to_disk()
+                            send_discord_message(f"💰 **TAKE-PROFIT REALIZÁLVA!** {ticker} +{price_change_pct:.2f}% | Ár: ${bg_price:.2f}")
+                            st.session_state.portfolio["shares"][ticker] = 0
+                            del st.session_state.portfolio["shares"][ticker]
+                            if ticker in st.session_state.buy_prices_memory: del st.session_state.buy_prices_memory[ticker]
+                            continue
+
 
                 # Auto-Trader Bot
                 if st.session_state.paper_persistent and st.session_state.autotrader_persistent:
