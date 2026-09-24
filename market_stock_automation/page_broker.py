@@ -104,6 +104,8 @@ if st.session_state.paper_persistent:
                 "Darab": trade_qty, 
                 "Összesen": f"${cost:.2f}"
             })
+            st.session_state["save_portfolio_to_disk"]()
+            st.session_state["save_history_to_disk"]()
             st.rerun()
         else: st.error("Nincs elég szabad egyenleged!")
 
@@ -117,7 +119,6 @@ if st.session_state.paper_persistent:
                 del st.session_state.portfolio['shares'][trade_ticker]
                 if trade_ticker in st.session_state.buy_prices_memory: del st.session_state.buy_prices_memory[trade_ticker]
             
-            # JAVÍTVA: Teljesen tiszta dollárjel formázás, zárójelek és visszaperjelek NÉLKÜL
             st.session_state.trade_history.append({
                 "Idő": datetime.now().strftime("%H:%M:%S"), 
                 "Ticker": trade_ticker, 
@@ -126,6 +127,8 @@ if st.session_state.paper_persistent:
                 "Darab": trade_qty, 
                 "Összesen": f"${revenue:.2f}"
             })
+            st.session_state["save_portfolio_to_disk"]()
+            st.session_state["save_history_to_disk"]()
             st.rerun()
         else: st.error("Nincs ennyi részvényed!")
 

@@ -5,6 +5,8 @@ import pandas_ta as ta
 import requests
 import time
 from datetime import datetime
+import json
+import os
 
 # Globális oldalbeállítás
 st.set_page_config(page_title="AI Tőzsde Központ Pro", layout="wide", page_icon="📊")
@@ -12,23 +14,46 @@ st.set_page_config(page_title="AI Tőzsde Központ Pro", layout="wide", page_ico
 # --- KÖZÖS RÉSZVÉNYKOSÁR ---
 AVAILABLE_TICKERS = ["TSLA", "NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "AMD", "COIN", "NIO", "CAN", "GPRO", "HMY", "RIVN", "PLUG", "CRSP", "PLTR", "SOFI", "IWDA.AS", "EMIM.AS", "UST"]
 
-# --- GLOBÁLIS MUNKAMENET INICIALIZÁLÁS ---
-if "portfolio" not in st.session_state: st.session_state.portfolio = {"balance": 10000.0, "shares": {}}
-if "trade_history" not in st.session_state: st.session_state.trade_history = []
+# --- GLOBÁLIS MUNKAMENET ÉS TARTÓS FÁJLMENTÉS (JAVÍTÁS) ---
+PORTFOLIO_FILE = "portfolio_db.json"
+HISTORY_FILE = "trade_history_db.csv"
+
+# A) Portfólió betöltése fájlból vagy létrehozása
+if os.path.exists(PORTFOLIO_FILE):
+    try:
+        with open(PORTFOLIO_FILE, "r") as f:
+            st.session_state.portfolio = json.load(f)
+    except:
+        st.session_state.portfolio = {"balance": 10000.0, "shares": {}}
+else:
+    st.session_state.portfolio = {"balance": 10000.0, "shares": {}}
+
+# B) Tranzakciós előzmények betöltése fájlból vagy létrehozása
+if os.path.exists(HISTORY_FILE):
+    try:
+        st.session_state.trade_history = pd.read_csv(HISTORY_FILE).to_dict(orient="records")
+    except:
+        st.session_state.trade_history = []
+else:
+    st.session_state.trade_history = []
+
+# Segédfüggvények az adatok azonnali lemezre írásához minden ügylet után
+def save_portfolio_to_disk():
+    with open(PORTFOLIO_FILE, "w") as f:
+        json.dump(st.session_state.portfolio, f)
+
+def save_history_to_disk():
+    if st.session_state.trade_history:
+        pd.DataFrame(st.session_state.trade_history).to_csv(HISTORY_FILE, index=False)
+
+st.session_state["save_portfolio_to_disk"] = save_portfolio_to_disk
+st.session_state["save_history_to_disk"] = save_history_to_disk
+
+# A többi kezdeti memória-beállítás változatlan marad (0 szóköz behúzás)
 if "buy_prices_memory" not in st.session_state: st.session_state.buy_prices_memory = {}
 if "equity_history" not in st.session_state: 
-    st.session_state.equity_history = [{"Idő": datetime.now().strftime("%H:%M:%S"), "Teljes Vagyon": 10000.0}]
+    st.session_state.equity_history = [{"Idő": datetime.now().strftime("%H:%M:%S"), "Teljes Vagyon": st.session_state.portfolio["balance"]}]
 
-if "paper_persistent" not in st.session_state: st.session_state.paper_persistent = False
-if "autotrader_persistent" not in st.session_state: st.session_state.autotrader_persistent = False
-if "hide_hold_persistent" not in st.session_state: st.session_state.hide_hold_persistent = False
-
-# Perzisztens szignál-memória a spamelés ellen
-if "signals_memory" not in st.session_state: st.session_state.signals_memory = {}
-
-st.session_state.paper_active = st.session_state.paper_persistent
-st.session_state.autotrader_active = st.session_state.autotrader_persistent
-st.session_state.hide_hold = st.session_state.hide_hold_persistent
 
 # ---- BIZTONSÁGOS FELHŐS DISCORD WEBHOOK BEOLVASÁS ----
 if "discord_webhook" not in st.session_state:
@@ -138,6 +163,8 @@ if all_data is not None and not all_data.empty:
                         revenue = bg_owned * bg_price
                         st.session_state.portfolio['balance'] += revenue
                         st.session_state.trade_history.append({"Idő": datetime.now().strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "🚨 STOP-LOSS ELADÁS", "Ár": f"${bg_price:.2f}", "Darab": bg_owned, "Összesen": f"${revenue:.2f}"})
+                        save_portfolio_to_disk()
+                        save_history_to_disk()
                         send_discord_message(f"🚨 **STOP-LOSS ELADVA!** `{ticker}` Veszteség: `{price_change_pct:.2f}%` | Ár: `${bg_price:.2f}`")
                         st.session_state.portfolio["shares"][ticker] = 0
                         del st.session_state.portfolio["shares"][ticker]
@@ -148,6 +175,8 @@ if all_data is not None and not all_data.empty:
                         revenue = bg_owned * bg_price
                         st.session_state.portfolio['balance'] += revenue
                         st.session_state.trade_history.append({"Idő": datetime.now().strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "💰 TAKE-PROFIT ELADÁS", "Ár": f"${bg_price:.2f}", "Darab": bg_owned, "Összesen": f"${revenue:.2f}"})
+                        save_portfolio_to_disk()
+                        save_history_to_disk()
                         send_discord_message(f"💰 **TAKE-PROFIT REALIZÁLVA!** `{ticker}` Profit: `+{price_change_pct:.2f}%` | Ár: `${bg_price:.2f}`")
                         st.session_state.portfolio["shares"][ticker] = 0
                         del st.session_state.portfolio["shares"][ticker]
@@ -163,8 +192,9 @@ if all_data is not None and not all_data.empty:
                                 st.session_state.portfolio['shares'][ticker] = 1
                                 st.session_state.buy_prices_memory[ticker] = bg_price
                                 st.session_state.trade_history.append({"Idő": datetime.now().strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "🤖 AUTO-VÉTEL", "Ár": f"${bg_price:.2f}", "Darab": 1, "Összesen": f"${bg_price:.2f}"})
+                                save_portfolio_to_disk()
+                                save_history_to_disk()
                                 st.session_state.signals_memory[ticker]["last_trade_time"] = bg_time
-                            # Ez a sor az "st.session_state.trade_history.append(...)" után jön (28 szóköz)
                             st.session_state.signals_memory[ticker]["last_trade_time"] = bg_time
                             send_discord_message(f"🤖 **AUTO-TRADER VÉTEL:** 1 db `{ticker}` -> `${bg_price:.2f}`")
                             st.toast(f"🤖 Auto-Trader vett: {ticker}")
@@ -176,6 +206,8 @@ if all_data is not None and not all_data.empty:
                                 "Idő": datetime.now().strftime("%H:%M:%S"), "Ticker": ticker, 
                                 "Típus": "🤖 AUTO-ELADÁS", "Ár": f"\({bg_price:.2f}", "Darab": bg_owned, "Összesen": f"\){revenue:.2f}"
                             })
+                            save_portfolio_to_disk()
+                            save_history_to_disk()
                             st.session_state.signals_memory[ticker]["last_trade_time"] = bg_time
                             send_discord_message(f"🤖 **AUTO-TRADER ELADÁS:** {bg_owned} db `{ticker}` -> `${bg_price:.2f}`")
                             st.session_state.portfolio["shares"][ticker] = 0
