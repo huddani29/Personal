@@ -1,85 +1,61 @@
 import streamlit as st
-import yfinance as yf
-import pandas as pd
-import pandas_ta as ta
 import plotly.graph_objects as go
+from zoneinfo import ZoneInfo
+from datetime import datetime
 from plotly.subplots import make_subplots
 import time
 
+fetch_and_analyze = st.session_state["fetch_and_analyze"]
+AVAILABLE_TICKERS = st.session_state["AVAILABLE_TICKERS"]
+
+# --- PIRCFAZISOK KIOLVASÁSA ---
+def get_market_phases_local():
+    now_b = datetime.now(ZoneInfo("Europe/Budapest"))
+    c_time = now_b.strftime("%H:%M")
+    is_w = now_b.weekday() < 5
+    eu, usa = "ZÁRVA 🔴", "ZÁRVA 🔴"
+    if is_w:
+        if "09:00" <= c_time < "17:30": eu = "NYITVA 🟢"
+        if "15:30" <= c_time < "16:30": usa = "NYITÓ ŐRÜLET 🚀"
+        elif "16:30" <= c_time < "19:30": usa = "EBÉDSZÜNET ☕"
+        elif "19:30" <= c_time < "22:00": usa = "ZÁRÓ HAJRÁ 🏁"
+    return eu, usa
+
+eu_status, usa_status = get_market_phases_local()
+
+# Két szép színes sáv a lap tetején
+c_eu, c_usa = st.columns(2)
+c_eu.info(f"🇪🇺 **Európai Piac:** {eu_status}")
+c_usa.warning(f"🇺🇸 **Amerikai Piac:** {usa_status}")
+
 st.title("📈 Élő Grafikon Monitor Dashboard")
 
-# Közös kosár beolvasása a főprogramból biztonságosan
-AVAILABLE_TICKERS = st.session_state.get("AVAILABLE_TICKERS", ["TSLA", "NVDA", "AAPL", "MSFT", "PLTR"])
-
-# --- OLDALSÁV BEÁLLÍTÁSOK ---
 st.sidebar.header("Monitor Beállítások")
 live_ticker = st.sidebar.selectbox("Választott Ticker:", options=AVAILABLE_TICKERS, index=0, key="live_t")
 live_interval = st.sidebar.selectbox("Felbontás:", options=["1m", "5m", "15m", "1h"], index=2, key="live_i")
 live_period = st.sidebar.selectbox("Időtartam:", options=["1d", "5d", "1mo"], index=1, key="live_p")
 refresh_rate = st.sidebar.slider("Frissítés (mp):", min_value=10, max_value=300, value=30, key="refresh_rate_slider")
 
-# LOCAL HÍRELEMZŐ FUNKCIÓ A SECCURE FUTÁSHOZ
-def local_sentiment(ticker):
-    try:
-        ticker_obj = yf.Ticker(ticker)
-        news = ticker_obj.news
-        if not news: return "Semleges 😐"
-        pos, neg = 0, 0
-        p_words = ["buy", "bullish", "upgrade", "growth", "profit", "beat", "surge", "higher", "success"]
-        n_words = ["sell", "bearish", "downgrade", "loss", "drop", "fall", "crash", "risk", "miss", "fail"]
-        for item in news[:5]:
-            title = item.get("title", "").lower()
-            for w in p_words: 
-                if w in title: pos += 1
-            for w in n_words: 
-                if w in title: neg += 1
-        if pos > neg: return "POZITÍV 📈"
-        elif neg > pos: return "NEGATÍV 📉"
-        return "Semleges 😐"
-    except: return "Semleges 😐"
-
-# ADATLEKÉRÉS ÉS INDIKÁTOROK HELYI KISZÁMÍTÁSA (Nincs aszinkron elcsúszás)
-data = yf.download(tickers=live_ticker, period=live_period, interval=live_interval, progress=False, multi_level_index=False)
+data = fetch_and_analyze(live_ticker, live_period, live_interval)
 
 if data is not None and not data.empty:
-    data.columns = [str(col) for col in data.columns]
-    data['RSI'] = ta.rsi(close=data['Close'], length=14)
-    data['SMA_20'] = ta.sma(close=data['Close'], length=20)
-    
-    bbands = ta.bbands(close=data['Close'], length=20, std=2)
-    if bbands is not None:
-        data['BBL'], data['BBU'] = bbands.iloc[:, 0], bbands.iloc[:, 2]
-    
-    macd_df = ta.macd(close=data['Close'], fast=12, slow=26, signal=9)
-    if macd_df is not None:
-        data['MACD'], data['MACD_Signal'] = macd_df.iloc[:, 0], macd_df.iloc[:, 2]
-
     data_clean = data.dropna(subset=['RSI', 'Close'])
-    
     if not data_clean.empty:
+        # JAVÍTÁS: Kényszerítjük a grafikont, hogy a helyi magyar időzónára (Europe/Budapest) konvertálja a tengelyt
+        data_clean.index = data_clean.index.tz_localize('UTC').tz_convert('Europe/Budapest') if data_clean.index.tz is None else data_clean.index.tz_convert('Europe/Budapest')
+        
         latest_row = data_clean.iloc[-1]
         latest_price = float(latest_row['Close'])
         rsi_val = float(latest_row['RSI'])
-        sentiment_label = local_sentiment(live_ticker)
-        
-        # Szignál helyi ellenőrzése
-        current_signal = "HOLD"
-        if rsi_val < 40 and 'MACD' in data_clean.columns and float(latest_row['MACD']) > float(latest_row['MACD_Signal']):
-            current_signal = "BUY (VÉTEL)"
-        elif rsi_val > 60 or ('BBU' in data_clean.columns and latest_price >= float(latest_row['BBU'])):
-            current_signal = "SELL (ELADÁS)"
+        current_signal = latest_row['Signal']
 
-        # Metrikák elrendezése
-        m1, m2, m3, m4 = st.columns(4)
+        m1, m2, m3 = st.columns(3)
         m1.metric(f"{live_ticker} Ár", f"${latest_price:.2f}")
         m2.metric("RSI (14) Index", f"{rsi_val:.2f}")
-        m3.metric("AI Piaci Hangulat", sentiment_label)
-        
-        if "BUY" in current_signal: m4.success(f"AI: {current_signal}")
-        elif "SELL" in current_signal: m4.error(f"AI: {current_signal}")
-        else: m4.info(f"AI: {current_signal}")
+        if "BUY" in current_signal: m3.success(f"AI JELZÉS: {current_signal}")
+        elif "SELL" in current_signal: m3.error(f"AI JELZÉS: {current_signal}")
+        else: m3.info(f"AI JELZÉS: {current_signal}")
 
-        # 3 Panels grafikon
         fig = make_subplots(rows=3, cols=1, shared_xaxes=True, row_heights=[0.5, 0.25, 0.25], vertical_spacing=0.05)
         fig.add_trace(go.Candlestick(x=data_clean.index, open=data_clean['Open'], high=data_clean['High'], low=data_clean['Low'], close=data_clean['Close'], name="Ár"), row=1, col=1)
         fig.add_trace(go.Scatter(x=data_clean.index, y=data_clean['SMA_20'], line=dict(color='orange', width=1), name="SMA 20"), row=1, col=1)
@@ -99,6 +75,5 @@ if data is not None and not data.empty:
         fig.update_layout(height=650, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=20, r=20, t=10, b=10))
         st.plotly_chart(fig, use_container_width=True)
 
-# Automatikus frissítés
 time.sleep(refresh_rate)
 st.rerun()
