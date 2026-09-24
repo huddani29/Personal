@@ -162,11 +162,8 @@ if all_data is not None and not all_data.empty:
                         revenue = bg_owned * bg_price
                         st.session_state.portfolio['balance'] += revenue
                         st.session_state.trade_history.append({"Idő": datetime.now().strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "🚨 STOP-LOSS ELADÁS", "Ár": f"${bg_price:.2f}", "Darab": bg_owned, "Összesen": f"${revenue:.2f}"})
-                        
-                        # AZONNALI LEMENTÉS LEMEZRE
                         save_portfolio_to_disk()
                         save_history_to_disk()
-                        
                         send_discord_message(f"🚨 **STOP-LOSS ELADVA!** `{ticker}` Veszteség: `{price_change_pct:.2f}%` | Ár: `${bg_price:.2f}`")
                         st.session_state.portfolio["shares"][ticker] = 0
                         del st.session_state.portfolio["shares"][ticker]
@@ -177,11 +174,8 @@ if all_data is not None and not all_data.empty:
                         revenue = bg_owned * bg_price
                         st.session_state.portfolio['balance'] += revenue
                         st.session_state.trade_history.append({"Idő": datetime.now().strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "💰 TAKE-PROFIT ELADÁS", "Ár": f"${bg_price:.2f}", "Darab": bg_owned, "Összesen": f"${revenue:.2f}"})
-                        
-                        # AZONNALI LEMENTÉS LEMEZRE
                         save_portfolio_to_disk()
                         save_history_to_disk()
-                        
                         send_discord_message(f"💰 **TAKE-PROFIT REALIZÁLVA!** `{ticker}` Profit: `+{price_change_pct:.2f}%` | Ár: `${bg_price:.2f}`")
                         st.session_state.portfolio["shares"][ticker] = 0
                         del st.session_state.portfolio["shares"][ticker]
@@ -200,11 +194,8 @@ if all_data is not None and not all_data.empty:
                                     "Idő": datetime.now().strftime("%H:%M:%S"), "Ticker": ticker, 
                                     "Típus": "🤖 AUTO-VÉTEL", "Ár": f"\({bg_price:.2f}", "Darab": 1, "Összesen": f"\){bg_price:.2f}"
                                 })
-                                
-                                # AZONNALI LEMENTÉS LEMEZRE
                                 save_portfolio_to_disk()
                                 save_history_to_disk()
-                                
                                 st.session_state.signals_memory[ticker]["last_trade_time"] = bg_time
                                 send_discord_message(f"🤖 **AUTO-TRADER VÉTEL:** 1 db `{ticker}` -> `${bg_price:.2f}`")
                                 st.toast(f"🤖 Auto-Trader vett: {ticker}")
@@ -216,11 +207,8 @@ if all_data is not None and not all_data.empty:
                                 "Idő": datetime.now().strftime("%H:%M:%S"), "Ticker": ticker, 
                                 "Típus": "🤖 AUTO-ELADÁS", "Ár": f"\({bg_price:.2f}", "Darab": bg_owned, "Összesen": f"\){revenue:.2f}"
                             })
-                            
-                            # AZONNALI LEMENTÉS LEMEZRE
                             save_portfolio_to_disk()
                             save_history_to_disk()
-                            
                             st.session_state.signals_memory[ticker]["last_trade_time"] = bg_time
                             send_discord_message(f"🤖 **AUTO-TRADER ELADÁS:** {bg_owned} db `{ticker}` -> `${bg_price:.2f}`")
                             st.session_state.portfolio["shares"][ticker] = 0
