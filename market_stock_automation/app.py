@@ -189,14 +189,18 @@ if st.session_state.AVAILABLE_TICKERS:
                     else:
                         st.session_state.signals_memory[ticker]["last_signal"] = "HOLD"
 
-                    # Kockázatkezelés
-                    if st.session_state.paper_persistent and bg_owned > 0:
-                        buy_price = st.session_state.buy_prices_memory.get(ticker, bg_price)
-                        price_change_pct = ((bg_price - buy_price) / buy_price) * 100
-                        current_sl = st.session_state.get("stop_loss_pct", 2.0)
-                    # Ez a sor a "current_sl = st.session_state.get('stop_loss_pct', 2.0)" után jön (20 szóköz)
+                # --- 1. KOCKÁZATKEZELÉS (STOP-LOSS / TAKE-PROFIT) ---
+                if st.session_state.paper_persistent and bg_owned > 0:
+                    buy_price = st.session_state.buy_prices_memory.get(ticker, bg_price)
+                    
+                    # JAVÍTÁS 1: Elsőként kiszámoljuk a százalékos elmozdulást, hogy létezzen a változó!
+                    price_change_pct = ((bg_price - buy_price) / buy_price) * 100
+                    
+                    # JAVÍTÁS 2: Beolvassuk mindkét csúszka aktuális állását a memóriából
+                    current_sl = st.session_state.get("stop_loss_pct", 2.0)
                     current_tp = st.session_state.get("take_profit_pct", 5.0)
                     
+                    # A) STOP-LOSS AUTOMATIKUS KIVÁLTÁS
                     if price_change_pct <= -current_sl:
                         revenue = bg_owned * bg_price
                         st.session_state.portfolio['balance'] += revenue
@@ -211,6 +215,7 @@ if st.session_state.AVAILABLE_TICKERS:
                         if ticker in st.session_state.buy_prices_memory: del st.session_state.buy_prices_memory[ticker]
                         continue
 
+                    # B) TAKE-PROFIT AUTOMATIKUS KIVÁLTÁS
                     elif price_change_pct >= current_tp:
                         revenue = bg_owned * bg_price
                         st.session_state.portfolio['balance'] += revenue
