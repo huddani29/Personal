@@ -82,7 +82,8 @@ if data is not None and not data.empty:
             fig.add_trace(go.Scatter(x=data_clean.index, y=data_clean['MACD_Signal'], line=dict(color='red', width=1.2, dash='dot'), name="Signal"), row=3, col=1)
         
         fig.update_layout(height=650, template="plotly_dark", xaxis_rangeslider_visible=False, margin=dict(l=20, r=20, t=10, b=10))
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch"
+)
 
 time.sleep(refresh_rate)
 st.rerun()

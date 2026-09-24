@@ -15,7 +15,8 @@ MARKET_GROUPS = {
 selected_market = st.selectbox("Válassz ki egy piacot:", options=list(MARKET_GROUPS.keys()))
 ticker_list = MARKET_GROUPS[selected_market]
 
-if st.button("📊 RANGSOR FRISSÍTÉSE", use_container_width=True):
+if st.button("📊 RANGSOR FRISSÍTÉSE", width="stretch"
+):
     with st.spinner("Adatok letöltése a tőzsdéről..."):
         ranking_data = []
         try:
@@ -65,9 +66,11 @@ if st.button("📊 RANGSOR FRISSÍTÉSE", use_container_width=True):
             c1,  c2 = st.columns(2)
             with c1:
                 st.markdown("### 🟢 TOP 10 Legnyereségesebb (Bullish)")
-                st.dataframe(df_winners.style.map(color_picker, subset=['Napi Változás (%)']), use_container_width=True)
+                st.dataframe(df_winners.style.map(color_picker, subset=['Napi Változás (%)']), width="stretch"
+)
             with c2:
                 st.markdown("### 🔴 TOP 10 Legveszteségesebb (Bearish)")
-                st.dataframe(df_losers.style.map(color_picker, subset=['Napi Változás (%)']), use_container_width=True)
+                st.dataframe(df_losers.style.map(color_picker, subset=['Napi Változás (%)']), width="stretch"
+)
         else:
             st.warning("Jelenleg nem elérhetőek adatok ehhez a piachoz.")

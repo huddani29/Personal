@@ -32,7 +32,8 @@ st.sidebar.markdown("---")
 st.sidebar.header("💬 Értesítések")
 st.sidebar.text_input("Discord Webhook URL:", value=st.session_state.discord_webhook, key="discord_webhook")
 
-if st.sidebar.button("🧪 Discord Teszt Üzenet", use_container_width=True, disabled=not st.session_state.discord_webhook):
+if st.sidebar.button("🧪 Discord Teszt Üzenet", width="stretch"
+, disabled=not st.session_state.discord_webhook):
     send_discord_message("🧪 **AI Tőzsde Bot:** Sikeres Discord webhook integráció!")
     st.sidebar.success("Teszt üzenet elküldve a Discordra!")
 
@@ -72,7 +73,8 @@ if st.session_state.paper_persistent:
 
     st.markdown("### 💼 Nyitott Pozícióid")
     if portfolio_rows: 
-        st.dataframe(pd.DataFrame(portfolio_rows), use_container_width=True)
+        st.dataframe(pd.DataFrame(portfolio_rows), width="stretch"
+)
     else: 
         st.info("Jelenleg nincs nyitott pozíciód.")
 
@@ -88,7 +90,8 @@ if st.session_state.paper_persistent:
     st.write(f"Kiválasztott eszköz aktuális piaci ára: **\${live_px:.2f}** | Tervezett ügylet értéke: **\${live_px * trade_qty:.2f}**")
 
     b1, b2, _ = st.columns(3)
-    if b1.button(f"🔴 VÉTEL: {trade_qty} db {trade_ticker}", use_container_width=True):
+    if b1.button(f"🔴 VÉTEL: {trade_qty} db {trade_ticker}", width="stretch"
+):
         cost = trade_qty * live_px
         if st.session_state.portfolio['balance'] >= cost:
             st.session_state.portfolio['balance'] -= cost
@@ -111,7 +114,8 @@ if st.session_state.paper_persistent:
             st.rerun()
         else: st.error("Nincs elég szabad egyenleged!")
 
-    if b2.button(f"🟢 ELADÁS: {trade_qty} db {trade_ticker}", use_container_width=True):
+    if b2.button(f"🟢 ELADÁS: {trade_qty} db {trade_ticker}", width="stretch"
+):
         owned = st.session_state.portfolio['shares'].get(trade_ticker, 0)
         if owned >= trade_qty:
             revenue = trade_qty * live_px
@@ -145,13 +149,15 @@ if st.session_state.paper_persistent:
         fig_equity = go.Figure()
         fig_equity.add_trace(go.Scatter(x=df_equity["Idő"], y=df_equity["Teljes Vagyon"], mode="lines+markers", name="Net Worth", line=dict(color="#2ecc71", width=2.5)))
         fig_equity.update_layout(height=300, template="plotly_dark", xaxis_title="Időpont", yaxis_title="Tőke (USD)", margin=dict(l=20, r=20, t=10, b=10))
-        st.plotly_chart(fig_equity, use_container_width=True)
+        st.plotly_chart(fig_equity, width="stretch"
+)
 
     # --- HISTORIKUS TRANZAKCIÓS NAPLÓ ---
     if st.session_state.trade_history:
         st.markdown("### 📜 Számla Tranzakciós Előzmények (Log)")
         df_history = pd.DataFrame(st.session_state.trade_history)
-        st.dataframe(df_history, use_container_width=True)
+        st.dataframe(df_history, width="stretch"
+)
         
         csv_data = df_history.to_csv(index=False).encode('utf-8')
         st.download_button(
@@ -159,7 +165,8 @@ if st.session_state.paper_persistent:
             data=csv_data,
             file_name=f"tozsde_naplo_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv",
-            use_container_width=True
+            width="stretch"
+
         )
 else:
     st.info("A Bróker Számla megtekintéséhez kapcsold be a bal oldali menüben a 'Paper Trading Aktiválása' opciót!")

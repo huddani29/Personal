@@ -15,7 +15,8 @@ scan_interval = st.selectbox("Idősík választás:", options=["5m", "15m", "1h"
 
 st.session_state.hide_hold = st.checkbox("Csak az aktív szignálok mutatása (HOLD elrejtése)", value=st.session_state.hide_hold)
 
-if st.button("🚀 PIACI SCANNER INDÍTÁSA", use_container_width=True):
+if st.button("🚀 PIACI SCANNER INDÍTÁSA", width="stretch"
+):
     results = []
     progress_bar = st.progress(0)
     scan_period = "5d" if scan_interval in ["5m", "15m"] else "3mo"
@@ -78,9 +79,11 @@ if st.button("🚀 PIACI SCANNER INDÍTÁSA", use_container_width=True):
             
         st.markdown("### 📊 Elemzési Jelentés")
         if not df_res.empty:
-            st.dataframe(df_res.style.map(color_signals, subset=['AI Ajánlás']), use_container_width=True)
+            st.dataframe(df_res.style.map(color_signals, subset=['AI Ajánlás']), width="stretch"
+)
             st.markdown("---")
             csv_scan = df_res.to_csv(index=False).encode('utf-8')
-            st.download_button(label="📥 Szkennelési Jelentés Letöltése (CSV)", data=csv_scan, file_name=f"ai_scanner_riport.csv", mime="text/csv", use_container_width=True)
+            st.download_button(label="📥 Szkennelési Jelentés Letöltése (CSV)", data=csv_scan, file_name=f"ai_scanner_riport.csv", mime="text/csv", width="stretch"
+)
         else:
             st.info("Nincs aktív trigger.")
