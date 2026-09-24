@@ -3,4 +3,4 @@ yfinance
 pandas
 requests
 plotly
-git+https://github.com
+pandas_ta
