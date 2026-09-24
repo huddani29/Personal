@@ -31,8 +31,16 @@ st.session_state.autotrader_active = st.session_state.autotrader_persistent
 st.session_state.hide_hold = st.session_state.hide_hold_persistent
 
 
-if "discord_webhook" not in st.session_state: 
-    st.session_state.discord_webhook = ""
+# ---- BIZTONSÁGOS FELHŐS DISCORD WEBHOOK BEOLVASÁS ----
+if "discord_webhook" not in st.session_state:
+    try:
+        # Elsőként megpróbálja beolvasni a Streamlit Cloud Secrets-ből (Felhő mód)
+        st.session_state.discord_webhook = st.secrets["DISCORD_WEBHOOK"]
+    except:
+        # Ha helyben futtatod a gépeden és nincs Secrets, üresen hagyja a mezőt
+        st.session_state.discord_webhook = ""
+# ------------------------------------------------------
+
 
 if "stop_loss_pct" not in st.session_state: st.session_state.stop_loss_pct = 2.0
 if "take_profit_pct" not in st.session_state: st.session_state.take_profit_pct = 5.0
