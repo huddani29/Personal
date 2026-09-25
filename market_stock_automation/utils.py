@@ -107,3 +107,25 @@ def can_open_position(cash_balance, total_portfolio_value, desired_trade_amount,
     if desired_trade_amount > (total_portfolio_value * max_share):
         return False, f"Túllépné a megengedett pozíciósúlyt (Max {int(max_share*100)}% / részvény)!"
     return True, "OK"
+
+def get_currency_symbol(ticker: str) -> str:
+    """Visszaadja a ticker alapján a megfelelő valutajelzést vagy kódot."""
+    ticker_upper = ticker.upper()
+    if ".BD" in ticker_upper or ".BU" in ticker_upper:
+        return "HUF"
+    elif ".AS" in ticker_upper or ".DE" in ticker_upper or ".F" in ticker_upper:
+        return "EUR"
+    elif "-USD" in ticker_upper:
+        return "USD"
+    else:
+        # Alapértelmezett, ha amerikai részvény vagy nincs specifikus utótag
+        return "USD"
+
+def format_price(price: float, currency: str) -> str:
+    """Szépen formázza az árat a valuta függvényében."""
+    if currency == "HUF":
+        return f"{price:,.0f} Ft"  # Forintnál általában nem kell tizedesjegy
+    elif currency == "EUR":
+        return f"€{price:,.2f}"
+    else:
+        return f"${price:,.2f}"
