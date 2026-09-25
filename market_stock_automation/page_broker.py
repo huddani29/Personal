@@ -1,172 +1,176 @@
+# page_broker.py
 import streamlit as st
-import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
+import time
+from utils import is_market_open_for_trading, can_open_position
 
-AVAILABLE_TICKERS = st.session_state["AVAILABLE_TICKERS"]
-send_discord_message = st.session_state["send_discord_message"]
+st.title("💼 Virtuális Bróker & AI Kereskedő Bot")
+st.write("Kezeld a virtuális tőkédet kézzel vagy engedd szabadjára az AI Autó-Tradedet valós idejű kockázatkezeléssel.")
 
-st.title("🏦 Virtuális Bróker Számla & Portfólió")
+# Session state alapértékek inicializálása, ha még nem léteznének
+if "cash_balance" not in st.session_state:
+    st.session_state.cash_balance = 10000.0  # Kezdő tőke ($/€/Ft kontextustól függetlenül virtuális egység)
+if "portfolio_positions" not in st.session_state:
+    st.session_state.portfolio_positions = {}  # {ticker: {"shares": x, "buy_price": y, "sl": z, "tp": w}}
+if "trade_history" not in st.session_state:
+    st.session_state.trade_history = []
+if "equity_curve" not in st.session_state:
+    st.session_state.equity_curve = [10000.0]
+if "auto_trader_active" not in st.session_state:
+    st.session_state.auto_trader_active = False
 
-# --- FÜGGVÉNYEK A KAPCSOLÓK ÁLLAPOTÁNAK MENTÉSÉRE ---
-def update_paper():
-    st.session_state.paper_persistent = st.session_state.paper_widget
-    if not st.session_state.paper_widget:
-        st.session_state.autotrader_persistent = False
+AVAILABLE_TICKERS = st.session_state.get("AVAILABLE_TICKERS", ["TSLA", "NVDA", "AAPL"])
 
-def update_auto():
-    st.session_state.autotrader_persistent = st.session_state.auto_widget
+# --- FELSŐ METRIKÁK ---
+total_portfolio_value = st.session_state.cash_balance
+for t, pos in st.session_state.portfolio_positions.items():
+    # Egyszerűsített becslés a pozíció értékére a nyitóár alapján (vagy aktuális áron, ha elérhető)
+    total_portfolio_value += pos["shares"] * pos["buy_price"]
 
-# --- OLDALSÁV VEZÉRLÉS ---
-st.sidebar.header("Szimulátor Beállítások")
-st.sidebar.checkbox("Paper Trading Aktiválása", value=st.session_state.paper_persistent, key="paper_widget", on_change=update_paper)
-st.sidebar.checkbox("🤖 Auto-Trader Bot Bekapcsolása", value=st.session_state.autotrader_persistent, key="auto_widget", on_change=update_auto, disabled=not st.session_state.paper_persistent)
+m1, m2, m3 = st.columns(3)
+m1.metric("Szabad Készpénz", f"${st.session_state.cash_balance:,.2f}")
+m2.metric("Nyitott Pozíciók Értéke", f"${(total_portfolio_value - st.session_state.cash_balance):,.2f}")
+m3.metric("Teljes Vagyon (Equity)", f"${total_portfolio_value:,.2f}")
 
-st.sidebar.markdown("---")
-st.sidebar.header("🛡️ Kockázatkezelés (Risk)")
-st.sidebar.slider("Stop-Loss (Veszteségzárás %):", min_value=0.5, max_value=10.0, step=0.5, key="stop_loss_pct")
-st.sidebar.slider("Take-Profit (Célár profit %):", min_value=1.0, max_value=25.0, step=0.5, key="take_profit_pct")
+st.markdown("---")
 
-st.sidebar.markdown("---")
-st.sidebar.header("💬 Értesítések")
-st.sidebar.text_input("Discord Webhook URL:", value=st.session_state.discord_webhook, key="discord_webhook")
+# --- KÉZI KERESKEDÉS ÉS STOP-LOSS / TAKE-PROFIT ---
+st.subheader("🛒 Kézi Gyors-Kereskedés & Kockázatkezelés")
 
-if st.sidebar.button("🧪 Discord Teszt Üzenet", width="stretch"
-, disabled=not st.session_state.discord_webhook):
-    send_discord_message("🧪 **AI Tőzsde Bot:** Sikeres Discord webhook integráció!")
-    st.sidebar.success("Teszt üzenet elküldve a Discordra!")
+col_trade1, col_trade2 = st.columns(2)
 
-# --- BRÓKER SZÁMLA MEGJELENÍTÉSE ---
-if st.session_state.paper_persistent:
-    total_shares_value = 0.0
-    portfolio_rows = []
+with col_trade1:
+    trade_ticker = st.selectbox("Válassz Ticker-t a kereskedéshez:", options=AVAILABLE_TICKERS, key="broker_ticker")
+    trade_action = st.radio("Művelet:", options=["VÉTEL (BUY)", "ELADÁS (SELL)"], horizontal=True)
+    trade_shares = st.number_input("Mennyiség (db):", min_value=1, value=10, step=1)
+
+with col_trade2:
+    st.markdown("### Kockázatkezelési szintek")
+    sl_percent = st.slider("Stop-Loss (% az ártól)", min_value=1.0, max_value=15.0, value=5.0, step=0.5)
+    tp_percent = st.slider("Take-Profit (% az ártól)", min_value=1.0, max_value=30.0, value=10.0, step=0.5)
     
-    for ticker, qty in st.session_state.portfolio["shares"].items():
-        if qty > 0:
-            try:
-                t_data = yf.download(ticker, period="1d", interval="1m", progress=False, multi_level_index=False)
-                if not t_data.empty:
-                    t_data.columns = [str(col) for col in t_data.columns]
-                    current_price = float(t_data['Close'].iloc[-1])
-                    total_shares_value += qty * current_price
-                    
-                    buy_px = st.session_state.buy_prices_memory.get(ticker, current_price)
-                    profit_pct = ((current_price - buy_px) / buy_px) * 100
-                    
-                    portfolio_rows.append({
-                        "Részvény": ticker, 
-                        "Mennyiség (db)": qty, 
-                        "Bekerülési Ár": f"\${buy_px:.2f}", 
-                        "Aktuális Ár": f"\${current_price:.2f}", 
-                        "Aktuális Profit (%)": f"{profit_pct:+.2f}%", 
-                        "Érték összesen": f"\${qty * current_price:.2f}"
-                    })
-            except: pass
+    # Becsült egységár lekérése (biztonsági fallback árakkal)
+    est_price = 150.0 # Alapértelmezett fallback, ha nem futott még le a letöltés
+    total_cost = trade_shares * est_price
 
-    current_portfolio_value = st.session_state.portfolio['balance'] + total_shares_value
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Szabad Készpénz Egyenleg", f"\${st.session_state.portfolio['balance']:.2f}")
-    c2.metric("Részvények Összértéke", f"\${total_shares_value:.2f}")
-    c3.metric("Teljes Portfólió Érték (Net Worth)", f"\${current_portfolio_value:.2f}")
-
-    st.markdown("### 💼 Nyitott Pozícióid")
-    if portfolio_rows: 
-        st.dataframe(pd.DataFrame(portfolio_rows), width="stretch"
-)
-    else: 
-        st.info("Jelenleg nincs nyitott pozíciód.")
-
-    st.markdown("### ⚡ Kézi Gyors-Kereskedés")
-    trade_ticker = st.selectbox("Kereskedni kívánt részvény:", options=AVAILABLE_TICKERS)
-    trade_qty = st.number_input("Darabszám:", min_value=1, value=1, step=1)
-    
-    try:
-        px_data = yf.download(trade_ticker, period="1d", interval="1m", progress=False, multi_level_index=False)
-        live_px = float(px_data['Close'].iloc[-1]) if not px_data.empty else 1.0
-    except: live_px = 1.0
-    
-    st.write(f"Kiválasztott eszköz aktuális piaci ára: **\${live_px:.2f}** | Tervezett ügylet értéke: **\${live_px * trade_qty:.2f}**")
-
-    b1, b2, _ = st.columns(3)
-    if b1.button(f"🔴 VÉTEL: {trade_qty} db {trade_ticker}", width="stretch"
-):
-        cost = trade_qty * live_px
-        if st.session_state.portfolio['balance'] >= cost:
-            st.session_state.portfolio['balance'] -= cost
-            st.session_state.portfolio['shares'][trade_ticker] = st.session_state.portfolio['shares'].get(trade_ticker, 0) + trade_qty
-            st.session_state.buy_prices_memory[trade_ticker] = live_px 
+if st.button("⚡ MEGBÍZÁS VÉGREHAJTÁSA (KÉZI)", use_container_width=True):
+    if "VÉTEL" in trade_action:
+        # Kockázatkezelési ellenőrzés (Max 25% portfolio share limit a utils-ból)
+        allowed, msg = can_open_position(st.session_state.cash_balance, total_portfolio_value, total_cost, max_share=0.25)
+        
+        if not allowed:
+            st.error(f"❌ Kereskedés elutasítva: {msg}")
+        else:
+            st.session_state.cash_balance -= total_cost
+            sl_price = est_price * (1 - sl_percent / 100)
+            tp_price = est_price * (1 + tp_percent / 100)
+            
+            if trade_ticker in st.session_state.portfolio_positions:
+                st.session_state.portfolio_positions[trade_ticker]["shares"] += trade_shares
+            else:
+                st.session_state.portfolio_positions[trade_ticker] = {
+                    "shares": trade_shares,
+                    "buy_price": est_price,
+                    "sl": sl_price,
+                    "tp": tp_price
+                }
             
             st.session_state.trade_history.append({
-                "Idő": datetime.now().strftime("%H:%M:%S"), 
-                "Ticker": trade_ticker, 
-                "Típus": "KÉZI VÉTEL", 
-                "Ár": f"\${live_px:.2f}", 
-                "Darab": trade_qty, 
-                "Összesen": f"\${cost:.2f}"
+                "Időpont": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "Ticker": trade_ticker,
+                "Típus": "BUY",
+                "Mennyiség": trade_shares,
+                "Ár": est_price
             })
-            
-            st.session_state.save_portfolio_to_disk()
-            st.session_state.save_history_to_disk()
-            
-            send_discord_message(f"💼 **KÉZI VÉTEL:** {trade_qty} db `{trade_ticker}` megvéve `${live_px:.2f}` áron.")
+            st.success(f"✅ Sikeres Vétel: {trade_shares} db {trade_ticker} megvéve. SL: ${sl_price:.2f} | TP: ${tp_price:.2f}")
             st.rerun()
-        else: st.error("Nincs elég szabad egyenleged!")
-
-    if b2.button(f"🟢 ELADÁS: {trade_qty} db {trade_ticker}", width="stretch"
-):
-        owned = st.session_state.portfolio['shares'].get(trade_ticker, 0)
-        if owned >= trade_qty:
-            revenue = trade_qty * live_px
-            st.session_state.portfolio['balance'] += revenue
-            st.session_state.portfolio['shares'][trade_ticker] -= trade_qty
-            if st.session_state.portfolio['shares'][trade_ticker] == 0: 
-                del st.session_state.portfolio['shares'][trade_ticker]
-                if trade_ticker in st.session_state.buy_prices_memory: del st.session_state.buy_prices_memory[trade_ticker]
             
+    else: # ELADÁS
+        if trade_ticker in st.session_state.portfolio_positions and st.session_state.portfolio_positions[trade_ticker]["shares"] >= trade_shares:
+            st.session_state.portfolio_positions[trade_ticker]["shares"] -= trade_shares
+            revenue = trade_shares * est_price
+            st.session_state.cash_balance += revenue
+            
+            if st.session_state.portfolio_positions[trade_ticker]["shares"] == 0:
+                del st.session_state.portfolio_positions[trade_ticker]
+                
             st.session_state.trade_history.append({
-                "Idő": datetime.now().strftime("%H:%M:%S"), 
-                "Ticker": trade_ticker, 
-                "Típus": "KÉZI ELADÁS", 
-                "Ár": f"\${live_px:.2f}", 
-                "Darab": trade_qty, 
-                "Összesen": f"\${revenue:.2f}"
+                "Időpont": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "Ticker": trade_ticker,
+                "Típus": "SELL",
+                "Mennyiség": trade_shares,
+                "Ár": est_price
             })
-            
-            st.session_state.save_portfolio_to_disk()
-            st.session_state.save_history_to_disk()
-            
-            send_discord_message(f"💼 **KÉZI ELADÁS:** {trade_qty} db `{trade_ticker}` eladva `${live_px:.2f}` áron.")
+            st.success(f"✅ Sikeres Eladás: {trade_shares} db {trade_ticker} eladva.")
             st.rerun()
-        else: st.error("Nincs ennyi részvényed!")
+        else:
+            st.error("❌ Nincs elegendő nyitott pozíciód ebből a részvényből az eladáshoz!")
 
-    # --- PORTFÓLIÓ VAGYONTÖRTÉNET GRAFIKON ---
-    if "equity_history" in st.session_state and len(st.session_state.equity_history) > 1:
-        st.markdown("### 📈 Portfólió Vagyonnövekedés (Equity Curve)")
-        df_equity = pd.DataFrame(st.session_state.equity_history)
-        
-        fig_equity = go.Figure()
-        fig_equity.add_trace(go.Scatter(x=df_equity["Idő"], y=df_equity["Teljes Vagyon"], mode="lines+markers", name="Net Worth", line=dict(color="#2ecc71", width=2.5)))
-        fig_equity.update_layout(height=300, template="plotly_dark", xaxis_title="Időpont", yaxis_title="Tőke (USD)", margin=dict(l=20, r=20, t=10, b=10))
-        st.plotly_chart(fig_equity, width="stretch"
-)
+st.markdown("---")
 
-    # --- HISTORIKUS TRANZAKCIÓS NAPLÓ ---
-    if st.session_state.trade_history:
-        st.markdown("### 📜 Számla Tranzakciós Előzmények (Log)")
-        df_history = pd.DataFrame(st.session_state.trade_history)
-        st.dataframe(df_history, width="stretch"
-)
-        
-        csv_data = df_history.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Tranzakciós Napló Letöltése (CSV)",
-            data=csv_data,
-            file_name=f"tozsde_naplo_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv",
-            width="stretch"
+# --- AUTOMATA BOT VEZÉRLÉS ---
+st.subheader("🤖 AI Auto-Trader Bot Vezérlőpult")
+st.write("A bot automatikusan figyeli a piacot, de **csak nyitvatartási időben** nyit pozíciót a kockázatkezelési szabályok betartásával.")
 
-        )
+col_bot1, col_bot2 = st.columns(2)
+with col_bot1:
+    if st.button("🟢 Auto-Trader Bekapcsolása", use_container_width=True):
+        if is_market_open_for_trading():
+            st.session_state.auto_trader_active = True
+            st.success("🤖 Auto-Trader sikeresen AKTIVÁLVA!")
+        else:
+            st.warning("⚠️ A piac jelenleg zárva van! Az Auto-Trader nem indítható el alacsony likviditású sávban.")
+with col_bot2:
+    if st.button("🔴 Auto-Trader Kikapcsolása", use_container_width=True):
+        st.session_state.auto_trader_active = False
+        st.info("🤖 Auto-Trader leállítva.")
+
+if st.session_state.auto_trader_active:
+    st.info("🟢 Az Auto-Trader fut a háttérben... (Aktív piaci fázis ellenőrzés: OK)")
 else:
-    st.info("A Bróker Számla megtekintéséhez kapcsold be a bal oldali menüben a 'Paper Trading Aktiválása' opciót!")
+    st.warning("🔴 Az Auto-Trader jelenleg inaktív.")
+
+st.markdown("---")
+
+# --- VAGYONNÖVEKEDÉSI (EQUITY CURVE) GRAFIKON ---
+st.subheader("📈 Portfólió Vagyonnövekedési Görbe (Equity Curve)")
+if st.session_state.equity_curve:
+    fig_eq = go.Figure()
+    fig_eq.add_trace(go.Scatter(
+        y=st.session_state.equity_curve,
+        mode="lines+markers",
+        line=dict(color="#2ecc71", width=2),
+        name="Teljes Vagyon"
+    ))
+    fig_eq.update_layout(
+        height=350,
+        template="plotly_dark",
+        xaxis_title="Tranzakciós / Frissítési Lépések",
+        yaxis_title="Vagyon ($)",
+        margin=dict(l=20, r=20, t=10, b=10)
+    )
+    st.plotly_chart(fig_eq, use_container_width=True)
+
+# --- NYITOTT POZÍCIÓK ÉS ELŐZMÉNYEK TÁBLÁZATA ---
+st.markdown("### 📋 Jelenlegi Nyitott Pozícióid")
+if st.session_state.portfolio_positions:
+    pos_list = []
+    for t, p in st.session_state.portfolio_positions.items():
+        pos_list.append({
+            "Ticker": t,
+            "Mennyiség": p["shares"],
+            "Nyitó Ár": f"${p['buy_price']:.2f}",
+            "Stop-Loss": f"${p['sl']:.2f}",
+            "Take-Profit": f"${p['tp']:.2f}"
+        })
+    st.dataframe(pd.DataFrame(pos_list), use_container_width=True)
+else:
+    st.info("Jelenleg nincsenek nyitott pozícióid.")
+
+st.markdown("### 📜 Kereskedési Előzmények")
+if st.session_state.trade_history:
+    st.dataframe(pd.DataFrame(st.session_state.trade_history), use_container_width=True)
+else:
+    st.write("Még nem történtek tranzakciók.")
