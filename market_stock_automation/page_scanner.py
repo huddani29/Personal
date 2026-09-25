@@ -5,7 +5,7 @@ import pandas as pd
 import pandas_ta as ta
 import time
 from datetime import datetime
-from utils import generate_ai_signal  # Beimportáljuk a központi logikát
+from utils import generate_ai_signal, get_currency_symbol, format_price
 
 AVAILABLE_TICKERS = st.session_state.get("AVAILABLE_TICKERS", ["TSLA", "NVDA", "AAPL"])
 
@@ -46,13 +46,9 @@ if st.button("🚀 PIACI SCANNER INDÍTÁSA", width="stretch"):
                     rsi_val = float(last_r['RSI'])
                     last_close_val = float(last_r['Close'])
                     
-                    # UNIVERZÁLIS EURÓPAI / AMERIKAI VALUTAFELISMERŐ
-                    if ".BD" in t:
-                        price_formatted = f"{last_close_val:,.0f} Ft"
-                    elif t in ["ASML", "SAP", "BMW", "DBK", "VOW3", "LVMH"]:
-                        price_formatted = f"€{last_close_val:.2f}"
-                    else:
-                        price_formatted = f"${last_close_val:.2f}"
+                    # DINAMIKUS VALUTAKEZELÉS A UTILS-BÓL
+                    ticker_curr = get_currency_symbol(t)
+                    price_formatted = format_price(last_close_val, ticker_curr)
 
                     # Jelölés kiegészítése extra státuszokkal ha van squeeze/divergencia
                     status_text = sig

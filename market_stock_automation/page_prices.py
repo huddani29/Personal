@@ -1,7 +1,9 @@
+# page_prices.py
 import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
+from utils import get_currency_symbol, format_price
 
 st.title("📊 Ár-Összehasonlító Dashboard")
 st.write("Hasonlítsd össze a figyelt részvényeid teljesítményét és relatív árait.")
@@ -36,7 +38,7 @@ if compare_tickers:
         )
         st.plotly_chart(fig_comp, width="stretch")
 
-        # Élő árak kiírása táblázatba, valutának megfelelően
+        # Élő árak kiírása táblázatba, valutának megfelelően a utils segítségével
         st.markdown("### 📌 Aktuális piaci árak")
         price_rows = []
         for t in compare_tickers:
@@ -46,17 +48,12 @@ if compare_tickers:
                     live_data.columns = [str(col) for col in live_data.columns]
                     last_p = float(live_data['Close'].iloc[-1])
                     
-                    # JAVÍTÁS: A 'last_p' változót használjuk a formázásban!
-                    if ".BD" in t: 
-                        px_fmt = f"{last_p:,.0f} Ft"
-                    elif t in ["ASML", "SAP", "BMW", "DBK", "VOW3", "LVMH"]: 
-                        px_fmt = f"€{last_p:.2f}"
-                    else: 
-                        px_fmt = f"${last_p:.2f}"
+                    # Dinamikus valuta és formázás lekérése
+                    curr = get_currency_symbol(t)
+                    px_fmt = format_price(last_p, curr)
                     
                     price_rows.append({"Részvény": t, "Aktuális Piaci Ár": px_fmt})
             except: continue
             
         if price_rows:
             st.dataframe(pd.DataFrame(price_rows), width="stretch")
-

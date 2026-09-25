@@ -1,9 +1,11 @@
+# page_monitor.py
 import streamlit as st
 import plotly.graph_objects as go
 from zoneinfo import ZoneInfo
 from datetime import datetime
 from plotly.subplots import make_subplots
 import time
+from utils import get_currency_symbol, format_price
 
 fetch_and_analyze = st.session_state["fetch_and_analyze"]
 AVAILABLE_TICKERS = st.session_state["AVAILABLE_TICKERS"]
@@ -45,9 +47,9 @@ if data is not None and not data.empty:
         rsi_val = float(latest_row['RSI'])
         current_signal = latest_row['Signal']
 
-        if ".BD" in live_ticker: price_formatted = f"{latest_price:,.0f} Ft"
-        elif live_ticker in ["ASML", "SAP", "BMW", "DBK", "VOW3", "LVMH"]: price_formatted = f"€{latest_price:.2f}"
-        else: price_formatted = f"${latest_price:.2f}"
+        # Dinamikus valuta és formázás a utils-ból
+        ticker_currency = get_currency_symbol(live_ticker)
+        price_formatted = format_price(latest_price, ticker_currency)
 
         m1, m2, m3 = st.columns(3)
         m1.metric(f"{live_ticker} Aktuális Ár", price_formatted)
@@ -55,7 +57,7 @@ if data is not None and not data.empty:
         
         # Prediktív státusz kijelzése szövegesen is
         status_text = current_signal
-        if bool(latest_row['Squeeze']): status_text += " | ⚡ ROOBANÁS ELŐTTI SQUEEZE"
+        if bool(latest_row['Squeeze']): status_text += " | ⚡ ROBBANÁS ELŐTTI SQUEEZE"
         if bool(latest_row['Divergence']): status_text += " | 🔮 BIKA DIVERGENCIA"
         
         if "BUY" in current_signal: m3.success(f"AI STATE: {status_text}")
@@ -67,18 +69,15 @@ if data is not None and not data.empty:
         fig.add_trace(go.Scatter(x=data_clean.index, y=data_clean['SMA_20'], line=dict(color='orange', width=1), name="SMA 20"), row=1, col=1)
         fig.add_trace(go.Scatter(x=data_clean.index, y=data_clean['SMA_200'], line=dict(color='red', width=2), name="SMA 200 (Trend)"), row=1, col=1)
         
-        # --- ÚJ: VIZUÁLIS PREDREDIKTÍV MARKEREK A CHARTON ---
-        # A) Zöld vételi nyilak kirajzolása pontosan a gyertyák alá
+        # --- VIZUÁLIS PREDREDIKTÍV MARKEREK A CHARTON ---
         buys = data_clean[data_clean['Signal'] == "BUY (VÉTEL)"]
         if not buys.empty:
             fig.add_trace(go.Scatter(x=buys.index, y=buys['Low'] * 0.99, mode="markers", marker=dict(symbol="triangle-up", size=12, color="#2ecc71"), name="VÉTELI MARKER (▲)"), row=1, col=1)
             
-        # B) Piros eladási nyilak kirajzolása pontosan a gyertyák fölé
         sells = data_clean[data_clean['Signal'] == "SELL (ELADÁS)"]
         if not sells.empty:
             fig.add_trace(go.Scatter(x=sells.index, y=sells['High'] * 1.01, mode="markers", marker=dict(symbol="triangle-down", size=12, color="#e74c3c"), name="ELADÁSI MARKER (▼)"), row=1, col=1)
 
-        # C) Squeeze (Robbanás előtti) zónák sárga kiemelése a SuperTrend helyett
         squeeze_zones = data_clean[data_clean['Squeeze'] == True]
         if not squeeze_zones.empty:
             fig.add_trace(go.Scatter(x=squeeze_zones.index, y=squeeze_zones['Close'], mode="markers", marker=dict(symbol="circle-open", size=6, color="#f1c40f"), name="⚡ Squeeze Robbanás Sáv"), row=1, col=1)

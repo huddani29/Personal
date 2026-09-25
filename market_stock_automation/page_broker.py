@@ -4,14 +4,14 @@ import pandas as pd
 import plotly.graph_objects as go
 from datetime import datetime
 import time
-from utils import is_market_open_for_trading, can_open_position
+from utils import is_market_open_for_trading, can_open_position, get_currency_symbol, format_price
 
 st.title("💼 Virtuális Bróker & AI Kereskedő Bot")
 st.write("Kezeld a virtuális tőkédet kézzel vagy engedd szabadjára az AI Autó-Tradedet valós idejű kockázatkezeléssel.")
 
 # Session state alapértékek inicializálása, ha még nem léteznének
 if "cash_balance" not in st.session_state:
-    st.session_state.cash_balance = 10000.0  # Kezdő tőke ($/€/Ft kontextustól függetlenül virtuális egység)
+    st.session_state.cash_balance = 10000.0  # Kezdő tőke
 if "portfolio_positions" not in st.session_state:
     st.session_state.portfolio_positions = {}  # {ticker: {"shares": x, "buy_price": y, "sl": z, "tp": w}}
 if "trade_history" not in st.session_state:
@@ -21,14 +21,14 @@ if "equity_curve" not in st.session_state:
 if "auto_trader_active" not in st.session_state:
     st.session_state.auto_trader_active = False
 
-AVAILABLE_TICKERS = st.session_state.get("AVAILABLE_TICKERS", ["TSLA", "NVDA", "AAPL"])
+AVAILABLE_TICKERS = st.session_state.get("AVAILABLE_TICKERS", ["TSLA", "NVDA", "AAPL", "OTP.BD", "MOL.BD"])
 
 # --- FELSŐ METRIKÁK ---
 total_portfolio_value = st.session_state.cash_balance
 for t, pos in st.session_state.portfolio_positions.items():
-    # Egyszerűsített becslés a pozíció értékére a nyitóár alapján (vagy aktuális áron, ha elérhető)
     total_portfolio_value += pos["shares"] * pos["buy_price"]
 
+# Alapértelmezett USD alapú formázás a szabad készpénzre és összvagyonra
 m1, m2, m3 = st.columns(3)
 m1.metric("Szabad Készpénz", f"${st.session_state.cash_balance:,.2f}")
 m2.metric("Nyitott Pozíciók Értéke", f"${(total_portfolio_value - st.session_state.cash_balance):,.2f}")
@@ -51,13 +51,13 @@ with col_trade2:
     sl_percent = st.slider("Stop-Loss (% az ártól)", min_value=1.0, max_value=15.0, value=5.0, step=0.5)
     tp_percent = st.slider("Take-Profit (% az ártól)", min_value=1.0, max_value=30.0, value=10.0, step=0.5)
     
-    # Becsült egységár lekérése (biztonsági fallback árakkal)
-    est_price = 150.0 # Alapértelmezett fallback, ha nem futott még le a letöltés
+    # Dinamikus valuta és árazás lekérése a kiválasztott ticker alapján
+    est_price = 150.0 if not trade_ticker.endswith(".BD") else 10000.0  # Alapértelmezett fallback
+    ticker_currency = get_currency_symbol(trade_ticker)
     total_cost = trade_shares * est_price
 
 if st.button("⚡ MEGBÍZÁS VÉGREHAJTÁSA (KÉZI)", width="stretch"):
     if "VÉTEL" in trade_action:
-        # Kockázatkezelési ellenőrzés (Max 25% portfolio share limit a utils-ból)
         allowed, msg = can_open_position(st.session_state.cash_balance, total_portfolio_value, total_cost, max_share=0.25)
         
         if not allowed:
@@ -82,9 +82,9 @@ if st.button("⚡ MEGBÍZÁS VÉGREHAJTÁSA (KÉZI)", width="stretch"):
                 "Ticker": trade_ticker,
                 "Típus": "BUY",
                 "Mennyiség": trade_shares,
-                "Ár": est_price
+                "Ár": format_price(est_price, ticker_currency)
             })
-            st.success(f"✅ Sikeres Vétel: {trade_shares} db {trade_ticker} megvéve. SL: ${sl_price:.2f} | TP: ${tp_price:.2f}")
+            st.success(f"✅ Sikeres Vétel: {trade_shares} db {trade_ticker} megvéve. SL: {format_price(sl_price, ticker_currency)} | TP: {format_price(tp_price, ticker_currency)}")
             st.rerun()
             
     else: # ELADÁS
@@ -101,7 +101,7 @@ if st.button("⚡ MEGBÍZÁS VÉGREHAJTÁSA (KÉZI)", width="stretch"):
                 "Ticker": trade_ticker,
                 "Típus": "SELL",
                 "Mennyiség": trade_shares,
-                "Ár": est_price
+                "Ár": format_price(est_price, ticker_currency)
             })
             st.success(f"✅ Sikeres Eladás: {trade_shares} db {trade_ticker} eladva.")
             st.rerun()
@@ -158,12 +158,13 @@ st.markdown("### 📋 Jelenlegi Nyitott Pozícióid")
 if st.session_state.portfolio_positions:
     pos_list = []
     for t, p in st.session_state.portfolio_positions.items():
+        curr = get_currency_symbol(t)
         pos_list.append({
             "Ticker": t,
             "Mennyiség": p["shares"],
-            "Nyitó Ár": f"${p['buy_price']:.2f}",
-            "Stop-Loss": f"${p['sl']:.2f}",
-            "Take-Profit": f"${p['tp']:.2f}"
+            "Nyitó Ár": format_price(p['buy_price'], curr),
+            "Stop-Loss": format_price(p['sl'], curr),
+            "Take-Profit": format_price(p['tp'], curr)
         })
     st.dataframe(pd.DataFrame(pos_list), width="stretch")
 else:
