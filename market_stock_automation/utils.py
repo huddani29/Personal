@@ -109,17 +109,14 @@ def can_open_position(cash_balance, total_portfolio_value, desired_trade_amount,
     return True, "OK"
 
 def get_currency_symbol(ticker: str) -> str:
-    """Visszaadja a ticker alapján a megfelelő valutajelzést vagy kódot."""
-    ticker_upper = ticker.upper()
-    if ".BD" in ticker_upper or ".BU" in ticker_upper:
-        return "HUF"
-    elif ".AS" in ticker_upper or ".DE" in ticker_upper or ".F" in ticker_upper:
-        return "EUR"
-    elif "-USD" in ticker_upper:
-        return "USD"
+    if ".BD" in ticker:
+        return "Ft"
+    elif ".SW" in ticker:
+        return "CHF"  # <--- Svájci frank a Nestlé-nek
+    elif ticker in ["ASML", "SAP", "BMW", "DBK", "VOW3", "LVMH", "IWDA.AS", "EMIM.AS"]:
+        return "€"
     else:
-        # Alapértelmezett, ha amerikai részvény vagy nincs specifikus utótag
-        return "USD"
+        return "$"
 
 def format_price(price: float, currency: str) -> str:
     """Szépen formázza az árat a valuta függvényében."""
@@ -127,5 +124,7 @@ def format_price(price: float, currency: str) -> str:
         return f"{price:,.0f} Ft"  # Forintnál általában nem kell tizedesjegy
     elif currency == "EUR":
         return f"€{price:,.2f}"
+    elif currency == "CHF":
+        return f"CHF {price:,.2f}"
     else:
         return f"${price:,.2f}"
