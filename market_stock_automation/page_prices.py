@@ -34,7 +34,7 @@ if compare_tickers:
             yaxis_title="Relatív Teljesítmény a hónap elejéhez képest (%)",
             margin=dict(l=20, r=20, t=10, b=10)
         )
-        st.plotly_chart(fig_comp, use_container_width=True)
+        st.plotly_chart(fig_comp, width="stretch")
 
         # Élő árak kiírása táblázatba, valutának megfelelően
         st.markdown("### 📌 Aktuális piaci árak")
@@ -58,5 +58,5 @@ if compare_tickers:
             except: continue
             
         if price_rows:
-            st.dataframe(pd.DataFrame(price_rows), use_container_width=True)
+            st.dataframe(pd.DataFrame(price_rows), width="stretch")
 

@@ -16,7 +16,7 @@ with col_sel1:
 with col_sel2:
     selected_period = st.selectbox("Történelmi időszak:", options=["3mo", "6mo", "1y"], index=1, key="ai_pred_period")
 
-if st.button("🚀 AI & Ichimoku Elemzés Futtatása", use_container_width=True):
+if st.button("🚀 AI & Ichimoku Elemzés Futtatása", width="stretch"):
     with st.spinner("Adatletöltés és AI modell betanítása folyamatban..."):
         df = yf.download(tickers=selected_ticker, period=selected_period, interval="1d", progress=False, multi_level_index=False)
         
@@ -77,7 +77,7 @@ if st.button("🚀 AI & Ichimoku Elemzés Futtatása", use_container_width=True)
                 xaxis_title="Dátum",
                 yaxis_title="Ár ($)"
             )
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
             
         else:
             st.error("Nem sikerült adatokat letölteni ehhez a Ticker-hez.")

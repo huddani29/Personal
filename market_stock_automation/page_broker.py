@@ -55,7 +55,7 @@ with col_trade2:
     est_price = 150.0 # Alapértelmezett fallback, ha nem futott még le a letöltés
     total_cost = trade_shares * est_price
 
-if st.button("⚡ MEGBÍZÁS VÉGREHAJTÁSA (KÉZI)", use_container_width=True):
+if st.button("⚡ MEGBÍZÁS VÉGREHAJTÁSA (KÉZI)", width="stretch"):
     if "VÉTEL" in trade_action:
         # Kockázatkezelési ellenőrzés (Max 25% portfolio share limit a utils-ból)
         allowed, msg = can_open_position(st.session_state.cash_balance, total_portfolio_value, total_cost, max_share=0.25)
@@ -116,14 +116,14 @@ st.write("A bot automatikusan figyeli a piacot, de **csak nyitvatartási időben
 
 col_bot1, col_bot2 = st.columns(2)
 with col_bot1:
-    if st.button("🟢 Auto-Trader Bekapcsolása", use_container_width=True):
+    if st.button("🟢 Auto-Trader Bekapcsolása", width="stretch"):
         if is_market_open_for_trading():
             st.session_state.auto_trader_active = True
             st.success("🤖 Auto-Trader sikeresen AKTIVÁLVA!")
         else:
             st.warning("⚠️ A piac jelenleg zárva van! Az Auto-Trader nem indítható el alacsony likviditású sávban.")
 with col_bot2:
-    if st.button("🔴 Auto-Trader Kikapcsolása", use_container_width=True):
+    if st.button("🔴 Auto-Trader Kikapcsolása", width="stretch"):
         st.session_state.auto_trader_active = False
         st.info("🤖 Auto-Trader leállítva.")
 
@@ -151,7 +151,7 @@ if st.session_state.equity_curve:
         yaxis_title="Vagyon ($)",
         margin=dict(l=20, r=20, t=10, b=10)
     )
-    st.plotly_chart(fig_eq, use_container_width=True)
+    st.plotly_chart(fig_eq, width="stretch")
 
 # --- NYITOTT POZÍCIÓK ÉS ELŐZMÉNYEK TÁBLÁZATA ---
 st.markdown("### 📋 Jelenlegi Nyitott Pozícióid")
@@ -165,12 +165,12 @@ if st.session_state.portfolio_positions:
             "Stop-Loss": f"${p['sl']:.2f}",
             "Take-Profit": f"${p['tp']:.2f}"
         })
-    st.dataframe(pd.DataFrame(pos_list), use_container_width=True)
+    st.dataframe(pd.DataFrame(pos_list), width="stretch")
 else:
     st.info("Jelenleg nincsenek nyitott pozícióid.")
 
 st.markdown("### 📜 Kereskedési Előzmények")
 if st.session_state.trade_history:
-    st.dataframe(pd.DataFrame(st.session_state.trade_history), use_container_width=True)
+    st.dataframe(pd.DataFrame(st.session_state.trade_history), width="stretch")
 else:
     st.write("Még nem történtek tranzakciók.")
