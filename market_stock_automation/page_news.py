@@ -15,12 +15,12 @@ if chosen_news_ticker:
             news_list = tick_obj.news
             
             if news_list:
-                for item in news_list[:8]: # Legfrissebb 8 hír megjelenítése
-                    title = item.get("title", "Nincs cím")
-                    publisher = item.get("publisher", "Ismeretlen forrás")
+                for item in news_list[:8]: # Legfrissebb 8 hír
+                    # JAVÍTÁS: Intelligens kulcs-ellenőrzés a Yahoo Finance új API struktúrájához
+                    title = item.get("headline", item.get("title", "Nincs cím"))
+                    publisher = item.get("source", item.get("publisher", "Ismeretlen forrás"))
                     link = item.get("link", "#")
                     
-                    # Szép vizuális kártyákba rendezzük a híreket
                     with st.container():
                         st.markdown(f"#### 🌐 [{title}]({link})")
                         st.write(f"✍️ **Forrás:** {publisher}")
