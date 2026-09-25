@@ -3,7 +3,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
-from utils import calculate_ichimoku, run_ml_price_prediction
+from utils import calculate_ichimoku, run_ml_price_prediction, get_currency_symbol, format_price
 
 AVAILABLE_TICKERS = st.session_state.get("AVAILABLE_TICKERS", ["TSLA", "NVDA", "AAPL"])
 
@@ -29,14 +29,21 @@ if st.button("🚀 AI & Ichimoku Elemzés Futtatása", width="stretch"):
             # 2. Gépi tanulásos árbecslés
             pred_price, curr_price, msg = run_ml_price_prediction(df)
             
+            # Dinamikus valuta lekérése
+            ticker_curr = get_currency_symbol(selected_ticker)
+            
             st.markdown("---")
             st.subheader(f"📊 Eredmények: {selected_ticker}")
             
             if pred_price is not None:
                 diff_pct = ((pred_price - curr_price) / curr_price) * 100
+                
+                curr_price_fmt = format_price(curr_price, ticker_curr)
+                pred_price_fmt = format_price(pred_price, ticker_curr)
+                
                 m1, m2, m3 = st.columns(3)
-                m1.metric("Jelenlegi Záróár", f"${curr_price:,.2f}")
-                m2.metric("AI Becsült Következő Ár", f"${pred_price:,.2f}", f"{diff_pct:+.2f}%")
+                m1.metric("Jelenlegi Záróár", curr_price_fmt)
+                m2.metric("AI Becsült Következő Ár", pred_price_fmt, f"{diff_pct:+.2f}%")
                 
                 if diff_pct > 0:
                     m3.success("📈 AI Irányvárakozás: BIKA (EMELKEDÉS)")
@@ -56,9 +63,7 @@ if st.button("🚀 AI & Ichimoku Elemzés Futtatása", width="stretch"):
             
             # Ichimoku vonalak keresése a oszlop nevek alapján (pandas_ta elnevezések)
             cols = df_ichi.columns
-            tenkan_col = [c for c in cols if 'ITS_' in c or 'Tenkan' in c or 'ISA_' in c]
             
-            # Ha léteznek Ichimoku oszlopok, kirajzoljuk a felhőt
             # Keresés a span vonalakra
             span_a_cols = [c for c in cols if 'ISA_' in c or 'SpanA' in c or 'ITS_' in c]
             span_b_cols = [c for c in cols if 'ISB_' in c or 'SpanB' in c]
@@ -75,7 +80,7 @@ if st.button("🚀 AI & Ichimoku Elemzés Futtatása", width="stretch"):
                 height=500,
                 title=f"{selected_ticker} - Technikai Ichimoku Elemzés",
                 xaxis_title="Dátum",
-                yaxis_title="Ár ($)"
+                yaxis_title=f"Ár ({ticker_curr})"
             )
             st.plotly_chart(fig, width="stretch")
             

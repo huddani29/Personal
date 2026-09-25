@@ -1,6 +1,8 @@
+# page_top10.py
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+from utils import get_currency_symbol, format_price
 
 st.title("🏆 TOP 10 Legnyereségesebb és Legveszteségesebb Részvény")
 st.write("Tekintsd át a mai nap legnagyobb mozgásait földrajzi piacok szerint lebontva.")
@@ -15,8 +17,7 @@ MARKET_GROUPS = {
 selected_market = st.selectbox("Válassz ki egy piacot:", options=list(MARKET_GROUPS.keys()))
 ticker_list = MARKET_GROUPS[selected_market]
 
-if st.button("📊 RANGSOR FRISSÍTÉSE", width="stretch"
-):
+if st.button("📊 RANGSOR FRISSÍTÉSE", width="stretch"):
     with st.spinner("Adatok letöltése a tőzsdéről..."):
         ranking_data = []
         try:
@@ -34,13 +35,9 @@ if st.button("📊 RANGSOR FRISSÍTÉSE", width="stretch"
                         last_close = float(df_clean['Close'].iloc[-1])
                         daily_change = ((last_close - prev_close) / prev_close) * 100
                         
-                        if ".BD" in t:
-                            currency_formatted = f"{last_close:,.0f} Ft"
-                        elif t in ["ASML", "SAP", "BMW", "DBK", "VOW3", "LVMH"]:
-                            currency_formatted = f"€{last_close:.2f}"
-                        else:
-                            currency_formatted = f"${last_close:.2f}"
-
+                        # DINAMIKUS VALUTA ÉS ÁRFORMÁZÁS A UTILS-BÓL
+                        currency_symbol = get_currency_symbol(t)
+                        currency_formatted = format_price(last_close, currency_symbol)
 
                         ranking_data.append({
                             "Részvény (Ticker)": t,
@@ -63,14 +60,12 @@ if st.button("📊 RANGSOR FRISSÍTÉSE", width="stretch"
                 if val < 0: return 'color: #e74c3c; font-weight: bold;'
                 return ''
 
-            c1,  c2 = st.columns(2)
+            c1, c2 = st.columns(2)
             with c1:
                 st.markdown("### 🟢 TOP 10 Legnyereségesebb (Bullish)")
-                st.dataframe(df_winners.style.map(color_picker, subset=['Napi Változás (%)']), width="stretch"
-)
+                st.dataframe(df_winners.style.map(color_picker, subset=['Napi Változás (%)']), width="stretch")
             with c2:
                 st.markdown("### 🔴 TOP 10 Legveszteségesebb (Bearish)")
-                st.dataframe(df_losers.style.map(color_picker, subset=['Napi Változás (%)']), width="stretch"
-)
+                st.dataframe(df_losers.style.map(color_picker, subset=['Napi Változás (%)']), width="stretch")
         else:
             st.warning("Jelenleg nem elérhetőek adatok ehhez a piachoz.")
