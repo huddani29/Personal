@@ -16,23 +16,43 @@ if chosen_news_ticker:
             
             if news_list:
                 for item in news_list[:8]:
-                    # 1. Ha van 'content' réteg, beljebb kell menni
-                    content = item.get("content", item)
+                    if not isinstance(item, dict):
+                        continue
                     
-                    # 2. Cím lekérése az új kulcsok alapján
-                    title = content.get("title", item.get("title", "Nincs cím"))
+                    # Biztonságos tartalom lekérés
+                    content = item.get("content")
+                    if not isinstance(content, dict):
+                        content = item # Ha nincs content, az itemet használjuk fallbackként
                     
-                    # 3. Forrás lekérése (provider -> displayName)
-                    provider = content.get("provider", {})
-                    publisher = provider.get("displayName", item.get("publisher", "Ismeretlen forrás"))
+                    # 1. Cím biztonságos kinyerése
+                    title = content.get("title") if isinstance(content, dict) else None
+                    if not title:
+                        title = item.get("title", "Nincs cím")
                     
-                    # 4. Link lekérése (clickThroughUrl vagy canonicalUrl vagy közvetlen link)
-                    click_url = content.get("clickThroughUrl", {})
-                    canonical_url = content.get("canonicalUrl", {})
-                    link = click_url.get("url", canonical_url.get("url", item.get("link", "#")))
+                    # 2. Forrás (provider -> displayName) biztonságos kinyerése
+                    publisher = "Ismeretlen forrás"
+                    if isinstance(content, dict):
+                        provider = content.get("provider")
+                        if isinstance(provider, dict):
+                            publisher = provider.get("displayName", "Ismeretlen forrás")
                     
-                    # Opcionális: Dátum/idő kiolvasása is hasznos lehet
-                    pub_date = content.get("pubDate", "")
+                    # 3. Link biztonságos kinyerése
+                    link = "#"
+                    if isinstance(content, dict):
+                        click_url = content.get("clickThroughUrl")
+                        if isinstance(click_url, dict):
+                            link = click_url.get("url", "#")
+                        
+                        if link == "#":
+                            canonical_url = content.get("canonicalUrl")
+                            if isinstance(canonical_url, dict):
+                                link = canonical_url.get("url", "#")
+                    
+                    if link == "#":
+                        link = item.get("link", "#")
+                    
+                    # Dátum
+                    pub_date = content.get("pubDate", "") if isinstance(content, dict) else ""
                     
                     with st.container():
                         st.markdown(f"#### 🌐 [{title}]({link})")
