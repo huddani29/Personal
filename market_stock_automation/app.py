@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit_autorefresh import st_autorefresh
 import yfinance as yf
 import pandas as pd
 import pandas_ta as ta
@@ -12,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 # Globális oldalbeállítás
 st.set_page_config(page_title="AI Tőzsde Központ Pro", layout="wide", page_icon="📊")
+count = st_autorefresh(interval=30000, limit=None, key="main_auto_refresh")
 
 # --- TARTÓS FÁJLMENTÉS ---
 PORTFOLIO_FILE = "portfolio_db.json"
@@ -37,9 +39,12 @@ if "portfolio" not in st.session_state:
 
 if "trade_history" not in st.session_state:
     if os.path.exists(HISTORY_FILE):
-        try: st.session_state.trade_history = pd.read_csv(HISTORY_FILE).to_dict(orient="records")
-        except: st.session_state.trade_history = []
-else: st.session_state.trade_history = []
+        try:
+            st.session_state.trade_history = pd.read_csv(HISTORY_FILE).to_dict(orient="records")
+        except:
+            st.session_state.trade_history = []
+    else:
+        st.session_state.trade_history = []
 
 def save_portfolio_to_disk():
     with open(PORTFOLIO_FILE, "w") as f: json.dump(st.session_state.portfolio, f)
@@ -69,9 +74,13 @@ st.session_state.paper_active = st.session_state.paper_persistent
 st.session_state.autotrader_active = st.session_state.autotrader_persistent
 st.session_state.hide_hold = st.session_state.hide_hold_persistent
 
+# --- DISCORD WEBHOOK INICIALIZÁLÁS ---
 if "discord_webhook" not in st.session_state:
-    try: st.session_state.discord_webhook = st.secrets["DISCORD_WEBHOOK"]
-    except: st.session_state.discord_webhook = ""
+    # Biztonságos olvasás: ha nincs secrets, üres stringet ad vissza a hiba helyett
+    try:
+        st.session_state.discord_webhook = st.secrets.get("DISCORD_WEBHOOK", "")
+    except Exception:
+        st.session_state.discord_webhook = ""
 
 def send_discord_message(message):
     if st.session_state.discord_webhook and st.session_state.discord_webhook.startswith("https://discord.com"):
@@ -311,6 +320,9 @@ page_prices = st.Page("page_prices.py", title="📊 Ár-Összehasonlító", icon
 page_config = st.Page("page_config.py", title="⚙️ Figyelt Részvények Beállítása", icon="⚙️")
 page_top10 = st.Page("page_top10.py", title="🏆 TOP 10 Nyertes & Vesztes", icon="🏆")
 page_news = st.Page("page_news.py", title="📰 AI Gazdasági Híradó", icon="📰")
+# --- ÚJ: Így adod hozzá az AI & Ichimoku oldalt ---
+page_ai_predict = st.Page("page_ai_predict.py", title="🧠 AI & Ichimoku Előrejelzés", icon="🧠")
 
-pg = st.navigation([page_monitor, page_broker, page_scanner, page_prices, page_top10, page_news, page_config])
+# Tedd be a listába is:
+pg = st.navigation([page_monitor, page_broker, page_scanner, page_prices, page_top10, page_news, page_config, page_ai_predict])
 pg.run()
