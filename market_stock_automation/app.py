@@ -6,13 +6,14 @@ import requests
 import json
 import os
 import time
+import numpy as np
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-# Globális oldalbeállítás - MINDENNEK a legtetején kell lennie!
+# Globális oldalbeállítás
 st.set_page_config(page_title="AI Tőzsde Központ Pro", layout="wide", page_icon="📊")
 
-# --- TARTÓS FÁJLMENTÉS (ADATBÁZISOK) ---
+# --- TARTÓS FÁJLMENTÉS ---
 PORTFOLIO_FILE = "portfolio_db.json"
 HISTORY_FILE = "trade_history_db.csv"
 TICKERS_FILE = "tickers_db.json"
@@ -29,19 +30,16 @@ if "AVAILABLE_TICKERS" not in st.session_state:
 if "portfolio" not in st.session_state:
     if os.path.exists(PORTFOLIO_FILE):
         try:
-            with open(PORTFOLIO_FILE, "r") as f: st.session_state.portfolio = json.load(f)
+            with open(PORTFOLIO_FILE, "r") as f:
+                st.session_state.portfolio = json.load(f)
         except: st.session_state.portfolio = {"balance": 10000.0, "shares": {}}
     else: st.session_state.portfolio = {"balance": 10000.0, "shares": {}}
 
 if "trade_history" not in st.session_state:
     if os.path.exists(HISTORY_FILE):
-        try:
-            st.session_state.trade_history = pd.read_csv(HISTORY_FILE).to_dict(orient="records")
-        except:
-            st.session_state.trade_history = []
-    else:
-        st.session_state.trade_history = []
-
+        try: st.session_state.trade_history = pd.read_csv(HISTORY_FILE).to_dict(orient="records")
+        except: st.session_state.trade_history = []
+else: st.session_state.trade_history = []
 
 def save_portfolio_to_disk():
     with open(PORTFOLIO_FILE, "w") as f: json.dump(st.session_state.portfolio, f)
@@ -83,7 +81,7 @@ def send_discord_message(message):
 
 st.session_state["send_discord_message"] = send_discord_message
 
-# --- ⏱️ PIACFAZISOK ---
+# --- ⏱️ PIACFÁZISOK ---
 def get_market_phases():
     now_budapest = datetime.now(ZoneInfo("Europe/Budapest"))
     current_time_str = now_budapest.strftime("%H:%M")
@@ -106,51 +104,48 @@ if usa_now != st.session_state.last_market_phases["USA"]:
     send_discord_message(f"🇺🇸 **AMERIKAI PIAC ÁLLAPOT VÁLTOZÁS:** `{usa_now}`")
     st.session_state.last_market_phases["USA"] = usa_now
 
-# --- OPTIMALIZÁLT INDIKÁTOR MOTOR (MÓDOSÍTOTT TREND-ELŐREJELZŐ) ---
+# --- 🔮 PREDIKTÍV INDIKÁTOR MOTOR ---
 def process_indicators(df_ticker):
-    if df_ticker.empty or len(df_ticker) < 200: return None # Az SMA 200 miatt minimum 200 gyertya kell!
+    if df_ticker.empty or len(df_ticker) < 200: return None
     try:
         df_ticker['RSI'] = ta.rsi(close=df_ticker['Close'], length=14)
         df_ticker['SMA_20'] = ta.sma(close=df_ticker['Close'], length=20)
-        df_ticker['SMA_200'] = ta.sma(close=df_ticker['Close'], length=200) # ÚJ: Hosszú távú trendvonal
+        df_ticker['SMA_200'] = ta.sma(close=df_ticker['Close'], length=200)
+        df_ticker['ATR'] = ta.atr(high=df_ticker['High'], low=df_ticker['Low'], close=df_ticker['Close'], length=14)
         
         bbands = ta.bbands(close=df_ticker['Close'], length=20, std=2)
-        if bbands is not None: df_ticker['BBL'], df_ticker['BBU'] = bbands.iloc[:, 0], bbands.iloc[:, 2]
-        else: df_ticker['BBL'], df_ticker['BBU'] = df_ticker['Close'], df_ticker['Close']
-        
+        if bbands is not None: 
+            df_ticker['BBL'], df_ticker['BBU'] = bbands.iloc[:, 0], bbands.iloc[:, 2]
+            df_ticker['Bandwidth'] = (df_ticker['BBU'] - df_ticker['BBL']) / df_ticker['SMA_20']
+        else: 
+            df_ticker['BBL'], df_ticker['BBU'], df_ticker['Bandwidth'] = df_ticker['Close'], df_ticker['Close'], 0
+
         macd_df = ta.macd(close=df_ticker['Close'], fast=12, slow=26, signal=9)
         if macd_df is not None: df_ticker['MACD'], df_ticker['MACD_Signal'] = macd_df.iloc[:, 0], macd_df.iloc[:, 2]
         else: df_ticker['MACD'], df_ticker['MACD_Signal'] = 0, 0
         
-        # ÚJ: SuperTrend Kiszámítása (Period=10, Multiplier=3.0)
         st_df = ta.supertrend(high=df_ticker['High'], low=df_ticker['Low'], close=df_ticker['Close'], length=10, multiplier=3.0)
-        if st_df is not None:
-            # A pandas_ta oszlopnevei trükkösek, így pozíció alapján mentjük el az irányt és az értéket
-            df_ticker['ST_Value'] = st_df.iloc[:, 0]
-            df_ticker['ST_Direction'] = st_df.iloc[:, 1] # 1 = Emelkedő (Zöld), -1 = Csökkenő (Piros)
+        df_ticker['ST_Direction'] = st_df.iloc[:, 1] if st_df is not None else 1
+        
+        # --- ÚJ: PREDREDIKTÍV MATEMATIKA ---
+        df_ticker['Pred_Signal'] = "HOLD"
+        
+        # A) Bollinger Squeeze (Árváltozás robbanás előrejelzése)
+        # Ha a szalagok szélessége az elmúlt 100 gyertya legalacsonyabb 10%-ában van
+        if len(df_ticker) > 100:
+            df_ticker['Squeeze'] = df_ticker['Bandwidth'] <= df_ticker['Bandwidth'].rolling(100).quantile(0.10)
         else:
-            df_ticker['ST_Value'] = df_ticker['Close']
-            df_ticker['ST_Direction'] = 1
-            
+            df_ticker['Squeeze'] = False
+
+        # B) RSI Bika Divergencia (Árfordulat előrejelzése az utolsó 5 gyertyán)
+        df_ticker['Divergence'] = False
+        if len(df_ticker) > 5:
+            price_falling = df_ticker['Close'].iloc[-1] < df_ticker['Close'].iloc[-5]
+            rsi_rising = df_ticker['RSI'].iloc[-1] > df_ticker['RSI'].iloc[-5]
+            if price_falling and rsi_rising and df_ticker['RSI'].iloc[-1] < 45:
+                df_ticker.iloc[-1, df_ticker.columns.get_loc('Divergence')] = True
+
         df_ticker['Signal'] = "HOLD"
-        
-        # --- ÚJ: ÁR-ELŐREJELZŐ GYERTYAMINTA FELISMERŐ ---
-        # A pandas_ta felismeri az Elnyelő (engulfing) és Kalapács (hammer) mintákat
-        df_ticker['CDL_HAMMER'] = ta.cdl_pattern(df_ticker['Open'], df_ticker['High'], df_ticker['Low'], df_ticker['Close'], name="hammer")
-        
-        # Módosítjuk a Vételi (BUY) szignált, hogy ha Kalapács gyertya alakul ki az alsó Bollingeren,
-        # az extra súllyal jelezze előre az árnövekedést!
-        buy_condition = (
-            (df_ticker['RSI'] < 45) & 
-            (df_ticker['MACD'] > df_ticker['MACD_Signal']) & 
-            ((df_ticker['Close'] <= df_ticker['BBL'] * 1.01) | (df_ticker['CDL_HAMMER'] != 0)) &
-            (df_ticker['ST_Direction'] == 1) &
-            (df_ticker['Close'] > df_ticker['SMA_200'])
-        )
-        
-        # JAVÍTOTT BIREŐSÍTETT TREND-ELŐREJELZŐ feltétel:
-        # RSI túladott ÉS MACD bika kereszteződés ÉS az ár az alsó Bollingeren van
-        # ÚJ PLUSZ: ÉS a SuperTrend is zöld (1) ÉS a hosszú távú SMA 200 felett vagyunk!
         buy_condition = (
             (df_ticker['RSI'] < 45) & 
             (df_ticker['MACD'] > df_ticker['MACD_Signal']) & 
@@ -167,7 +162,6 @@ def process_indicators(df_ticker):
 
 def fetch_and_analyze(ticker, period, interval):
     try:
-        # Figyelem: Mivel az SMA 200-hoz sok adat kell, a 'period' változót kényszerítjük nagyobb időtávra a háttérben
         safe_period = "1mo" if interval in ["1m", "5m", "15m"] else "1y"
         data = yf.download(tickers=ticker, period=safe_period, interval=interval, progress=False, multi_level_index=False, timeout=3)
         if data.empty: return None
@@ -177,7 +171,7 @@ def fetch_and_analyze(ticker, period, interval):
 
 st.session_state["fetch_and_analyze"] = fetch_and_analyze
 
-# --- 🤖 FAGYÁSBIZTOS HÁTTÉR-MOTOR ---
+# --- 🤖 INTELLIGENS PREDREDIKTÍV HÁTTÉR-MOTOR ---
 current_interval = st.session_state.get("live_i", "15m")
 current_time_now = time.time()
 
@@ -194,7 +188,7 @@ if st.session_state.AVAILABLE_TICKERS:
     if all_data is not None and not all_data.empty:
         for ticker in st.session_state.AVAILABLE_TICKERS:
             if ticker not in st.session_state.signals_memory:
-                st.session_state.signals_memory[ticker] = {"last_signal": "HOLD", "last_notified_time": "", "last_trade_time": None}
+                st.session_state.signals_memory[ticker] = {"last_signal": "HOLD", "last_notified_time": "", "last_trade_time": None, "last_pred": ""}
 
             try:
                 if len(st.session_state.AVAILABLE_TICKERS) > 1: bg_data = all_data[ticker].copy()
@@ -206,22 +200,33 @@ if st.session_state.AVAILABLE_TICKERS:
             if bg_data_analyzed is not None:
                 bg_data_clean = bg_data_analyzed.dropna(subset=['RSI', 'Close'])
                 if not bg_data_clean.empty:
+                    # Ez a szakasz a "if not bg_data_clean.empty:" feltétel után következik (20 szóköz)
                     latest_bg_row = bg_data_clean.iloc[-1]
                     bg_time = str(bg_data_clean.index[-1]) 
                     bg_price = float(latest_bg_row['Close'])
                     bg_signal = latest_bg_row['Signal']
                     bg_owned = st.session_state.portfolio["shares"].get(ticker, 0)
                     
+                    # 1. PREDREDIKTÍV RIASZTÁSOK (Mielőtt megtörténne a vétel/eladás) (20 szóköz)
+                    if bool(latest_bg_row['Squeeze']) and st.session_state.signals_memory[ticker]["last_pred"] != "SQUEEZE_" + bg_time:
+                        send_discord_message(f"⚠️ **ÁRVÁLTOZÁS ELŐREJELZÉS:** `{ticker}` szalagjai extrém módon beszűkültek! **Hatalmas erejű robbanásszerű elmozdulás várható** a napokban!")
+                        st.session_state.signals_memory[ticker]["last_pred"] = "SQUEEZE_" + bg_time
+                        
+                    if bool(latest_bg_row['Divergence']) and st.session_state.signals_memory[ticker]["last_pred"] != "DIV_" + bg_time:
+                        send_discord_message(f"🔮 **TRENDFORDULÓ ELŐREJELZÉS:** `{ticker}` grafikonján **RSI Bika Divergencia** alakult ki! Az eső trend kifulladt, emelkedő árforduló prediktálható!")
+                        st.session_state.signals_memory[ticker]["last_pred"] = "DIV_" + bg_time
+
+                    # 2. VÉTEL / ELADÁS RIASZTÁSOK (20 szóköz)
                     if bg_signal != "HOLD":
                         if st.session_state.signals_memory[ticker]["last_signal"] != bg_signal and st.session_state.signals_memory[ticker]["last_notified_time"] != bg_time:
-                            msg = f"🔔 **AI JELZÉS:** `{ticker}` -> **{bg_signal}** | Ár: `${bg_price:.2f}`"
+                            msg = f"🔔 **ÉLES AI TRADING JELZÉS:** `{ticker}` -> **{bg_signal}** | Ár: `${bg_price:.2f}`"
                             send_discord_message(msg)
                             st.session_state.signals_memory[ticker]["last_signal"] = bg_signal
                             st.session_state.signals_memory[ticker]["last_notified_time"] = bg_time
                     else:
                         st.session_state.signals_memory[ticker]["last_signal"] = "HOLD"
 
-                    # --- KOCKÁZATKEZELÉS (STOP-LOSS / TAKE-PROFIT) ---
+                    # Kockázatkezelés (20 szóköz)
                     buy_price = st.session_state.buy_prices_memory.get(ticker, bg_price)
                     price_change_pct = ((bg_price - buy_price) / buy_price) * 100
                     current_sl = st.session_state.get("stop_loss_pct", 2.0)
@@ -231,10 +236,10 @@ if st.session_state.AVAILABLE_TICKERS:
                         if price_change_pct <= -current_sl:
                             revenue = bg_owned * bg_price
                             st.session_state.portfolio['balance'] += revenue
-                            st.session_state.trade_history.append({"Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "🚨 STOP-LOSS ELADÁS", "Ár": f"${bg_price:.2f}", "Darab": bg_owned, "Összesen": f"${revenue:.2f}"})
+                            st.session_state.trade_history.append({"Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "🚨 STOP-LOSS ELADÁS", "Ár": f"\({bg_price:.2f}", "Darab": bg_owned, "Összesen": f"\){revenue:.2f}"})
                             save_portfolio_to_disk()
                             save_history_to_disk()
-                            send_discord_message(f"🚨 **STOP-LOSS ELADVA!** {ticker} {price_change_pct:.2f}% | Ár: ${bg_price:.2f}")
+                            send_discord_message(f"🚨 **STOP-LOSS ELADVA!** {ticker} {price_change_pct:.2f}% | Ár: \${bg_price:.2f}")
                             st.session_state.portfolio["shares"][ticker] = 0
                             del st.session_state.portfolio["shares"][ticker]
                             if ticker in st.session_state.buy_prices_memory: del st.session_state.buy_prices_memory[ticker]
@@ -243,16 +248,16 @@ if st.session_state.AVAILABLE_TICKERS:
                         elif price_change_pct >= current_tp:
                             revenue = bg_owned * bg_price
                             st.session_state.portfolio['balance'] += revenue
-                            st.session_state.trade_history.append({"Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "💰 TAKE-PROFIT ELADÁS", "Ár": f"${bg_price:.2f}", "Darab": bg_owned, "Összesen": f"${revenue:.2f}"})
+                            st.session_state.trade_history.append({"Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "💰 TAKE-PROFIT ELADÁS", "Ár": f"\({bg_price:.2f}", "Darab": bg_owned, "Összesen": f"\){revenue:.2f}"})
                             save_portfolio_to_disk()
                             save_history_to_disk()
-                            send_discord_message(f"💰 **TAKE-PROFIT REALIZÁLVA!** {ticker} +{price_change_pct:.2f}% | Ár: ${bg_price:.2f}")
+                            send_discord_message(f"💰 **TAKE-PROFIT REALIZÁLVA!** {ticker} +{price_change_pct:.2f}% | Ár: \${bg_price:.2f}")
                             st.session_state.portfolio["shares"][ticker] = 0
                             del st.session_state.portfolio["shares"][ticker]
                             if ticker in st.session_state.buy_prices_memory: del st.session_state.buy_prices_memory[ticker]
                             continue
 
-                    # Auto-Trader Bot
+                    # Auto-Trader Bot (20 szóköz)
                     if st.session_state.paper_persistent and st.session_state.autotrader_persistent:
                         if st.session_state.signals_memory[ticker]["last_trade_time"] != bg_time:
                             if bg_signal == "BUY (VÉTEL)" and bg_owned == 0:
@@ -260,34 +265,33 @@ if st.session_state.AVAILABLE_TICKERS:
                                     st.session_state.portfolio['balance'] -= bg_price
                                     st.session_state.portfolio['shares'][ticker] = 1
                                     st.session_state.buy_prices_memory[ticker] = bg_price
-                                    st.session_state.trade_history.append({"Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "🤖 AUTO-VÉTEL", "Ár": f"${bg_price:.2f}", "Darab": 1, "Összesen": f"${bg_price:.2f}"})
+                                    st.session_state.trade_history.append({"Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "🤖 AUTO-VÉTEL", "Ár": f"\({bg_price:.2f}", "Darab": 1, "Összesen": f"\){bg_price:.2f}"})
                                     save_portfolio_to_disk()
                                     save_history_to_disk()
                                     st.session_state.signals_memory[ticker]["last_trade_time"] = bg_time
-                                    send_discord_message(f"🤖 **AUTO-TRADER VÉTEL:** 1 db {ticker} -> ${bg_price:.2f}")
+                                    send_discord_message(f"🤖 **AUTO-TRADER VÉTEL:** 1 db {ticker} -> \${bg_price:.2f}")
                                     st.toast(f"🤖 Auto-Trader vett: {ticker}")
                                     
                             elif bg_signal == "SELL (ELADÁS)" and bg_owned > 0:
                                 revenue = bg_owned * bg_price
                                 st.session_state.portfolio['balance'] += revenue
+                                st.session_state.trade_history.append({"Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), "Ticker": ticker, "Típus": "🤖 AUTO-ELADÁS", "Ár": f"\({bg_price:.2f}", "Darab": bg_owned, "Összesen": f"\){revenue:.2f}"})
                                 save_portfolio_to_disk()
                                 save_history_to_disk()
-                                
                                 st.session_state.signals_memory[ticker]["last_trade_time"] = bg_time
-                                send_discord_message(f"🤖 **AUTO-TRADER ELADÁS:** {bg_owned} db {ticker} -> ${bg_price:.2f}")
+                                send_discord_message(f"🤖 **AUTO-TRADER ELADÁS:** {bg_owned} db {ticker} -> \${bg_price:.2f}")
                                 st.session_state.portfolio["shares"][ticker] = 0
                                 del st.session_state.portfolio["shares"][ticker]
-                                
-                                if ticker in st.session_state.buy_prices_memory: 
-                                    del st.session_state.buy_prices_memory[ticker]
-# --- VAGYONTÖRTÉNET MENTÉSE ---
+                                if ticker in st.session_state.buy_prices_memory: del st.session_state.buy_prices_memory[ticker]
+
+# --- VAGYONTÖRTÉNET MENTÉSE (Ciklus lezárása után kívül) (0 szóköz) ---
 if st.session_state.paper_persistent and 'all_data' in locals() and all_data is not None and not all_data.empty:
     calc_shares_value = 0.0
     for t, qty in st.session_state.portfolio["shares"].items():
         if qty > 0:
             try:
                 if isinstance(all_data.columns, pd.MultiIndex):
-                    if t in all_data.columns.levels: 
+                    if t in all_data.columns.levels[0]: 
                         calc_shares_value += qty * float(all_data[t]['Close'].dropna().iloc[-1])
                 else:
                     if t in all_data.columns: 
@@ -296,13 +300,10 @@ if st.session_state.paper_persistent and 'all_data' in locals() and all_data is 
                 pass
                 
     total_net_worth = st.session_state.portfolio['balance'] + calc_shares_value
-    
     if not st.session_state.equity_history or st.session_state.equity_history[-1]["Teljes Vagyon"] != total_net_worth:
-        st.session_state.equity_history.append({
-            "Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), 
-            "Teljes Vagyon": round(total_net_worth, 2)
-        })
-# --- MULTI-PAGE RENDSZER ---
+        st.session_state.equity_history.append({"Idő": datetime.now(ZoneInfo("Europe/Budapest")).strftime("%H:%M:%S"), "Teljes Vagyon": round(total_net_worth, 2)})
+
+# --- MULTI-PAGE RENDSZER --- (0 szóköz)
 page_monitor = st.Page("page_monitor.py", title="📈 Élő Grafikon Monitor", icon="📉")
 page_broker = st.Page("page_broker.py", title="🏦 Bróker Számla & Portfólió", icon="💰")
 page_scanner = st.Page("page_scanner.py", title="🔍 Többrészes AI Scanner", icon="⚡")
