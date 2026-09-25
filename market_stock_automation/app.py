@@ -27,7 +27,8 @@ TICKERS_FILE = "tickers_db.json"
 DEFAULT_TICKERS = [
     "TSLA", "NVDA", "AAPL", "MSFT", "GOOGL", "AMZN", "AMD", "COIN", "NIO", "PLTR", "SOFI", 
     "IWDA.AS", "EMIM.AS", "UST",
-    "4IG.BD","OTP.BD", "MOL.BD", "RICHT.BD"
+    "4IG.BD","OTP.BD", "MOL.BD", "RICHT.BD", "OPUS.BD"
+    "NESN.SW"
 ]
 
 if "AVAILABLE_TICKERS" not in st.session_state:
