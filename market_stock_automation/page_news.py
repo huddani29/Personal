@@ -14,29 +14,32 @@ if chosen_news_ticker:
             tick_obj = yf.Ticker(chosen_news_ticker)
             news_list = tick_obj.news
             
-            # --- 🛠️ DEBUG BLOKK INDÍTÁSA ---
-            st.markdown("### 🪲 Rendszer-Diagnosztika (Debug info)")
-            st.write(f"Letöltött adatok típusa: `{type(news_list)}`")
-            st.write(f"Talált elemek száma: `{len(news_list) if news_list else 0}`")
-            
-            # Kiírjuk a nyers adatokat az első elemből, hogy lássuk a kulcsokat
-            if news_list and len(news_list) > 0:
-                st.markdown("**Nyers első hír-objektum szerkezete:**")
-                st.json(news_list[0])
-            else:
-                st.warning("⚠️ Figyelem: A Yahoo Finance üres listát küldött vissza a hírekre! (Lehetséges hálózati tiltás vagy API változás)")
-            st.markdown("---")
-            # --- 🛠️ DEBUG BLOKK VÉGE ---
-            
             if news_list:
                 for item in news_list[:8]:
-                    title = item.get("headline", item.get("title", "Nincs cím"))
-                    publisher = item.get("source", item.get("publisher", "Ismeretlen forrás"))
-                    link = item.get("link", "#")
+                    # 1. Ha van 'content' réteg, beljebb kell menni
+                    content = item.get("content", item)
+                    
+                    # 2. Cím lekérése az új kulcsok alapján
+                    title = content.get("title", item.get("title", "Nincs cím"))
+                    
+                    # 3. Forrás lekérése (provider -> displayName)
+                    provider = content.get("provider", {})
+                    publisher = provider.get("displayName", item.get("publisher", "Ismeretlen forrás"))
+                    
+                    # 4. Link lekérése (clickThroughUrl vagy canonicalUrl vagy közvetlen link)
+                    click_url = content.get("clickThroughUrl", {})
+                    canonical_url = content.get("canonicalUrl", {})
+                    link = click_url.get("url", canonical_url.get("url", item.get("link", "#")))
+                    
+                    # Opcionális: Dátum/idő kiolvasása is hasznos lehet
+                    pub_date = content.get("pubDate", "")
                     
                     with st.container():
                         st.markdown(f"#### 🌐 [{title}]({link})")
-                        st.write(f"✍️ **Forrás:** {publisher}")
+                        st.write(f"✍️ **Forrás:** {publisher} {f'({pub_date[:10]})' if pub_date else ''}")
                         st.markdown("---")
+            else:
+                st.warning("⚠️ Figyelem: A Yahoo Finance üres listát küldött vissza a hírekre!")
+                
         except Exception as e:
             st.error(f"Nem sikerült letölteni a híreket. Hibaüzenet: `{str(e)}`")
