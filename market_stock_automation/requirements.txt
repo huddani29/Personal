@@ -5,3 +5,4 @@ requests
 plotly
 pandas_ta
 streamlit-autorefresh
+scikit-learn
