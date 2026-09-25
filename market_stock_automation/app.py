@@ -134,6 +134,20 @@ def process_indicators(df_ticker):
             
         df_ticker['Signal'] = "HOLD"
         
+        # --- ÚJ: ÁR-ELŐREJELZŐ GYERTYAMINTA FELISMERŐ ---
+        # A pandas_ta felismeri az Elnyelő (engulfing) és Kalapács (hammer) mintákat
+        df_ticker['CDL_HAMMER'] = ta.cdl_pattern(df_ticker['Open'], df_ticker['High'], df_ticker['Low'], df_ticker['Close'], name="hammer")
+        
+        # Módosítjuk a Vételi (BUY) szignált, hogy ha Kalapács gyertya alakul ki az alsó Bollingeren,
+        # az extra súllyal jelezze előre az árnövekedést!
+        buy_condition = (
+            (df_ticker['RSI'] < 45) & 
+            (df_ticker['MACD'] > df_ticker['MACD_Signal']) & 
+            ((df_ticker['Close'] <= df_ticker['BBL'] * 1.01) | (df_ticker['CDL_HAMMER'] != 0)) &
+            (df_ticker['ST_Direction'] == 1) &
+            (df_ticker['Close'] > df_ticker['SMA_200'])
+        )
+        
         # JAVÍTOTT BIREŐSÍTETT TREND-ELŐREJELZŐ feltétel:
         # RSI túladott ÉS MACD bika kereszteződés ÉS az ár az alsó Bollingeren van
         # ÚJ PLUSZ: ÉS a SuperTrend is zöld (1) ÉS a hosszú távú SMA 200 felett vagyunk!
